@@ -295,15 +295,19 @@ function ls_save_slider() {
 	$wpdb->query("INSERT INTO $table_name (id, name, data, date_c, date_m) VALUES ('$id', '$name', '{}', '".time()."', '".time()."')
 							ON DUPLICATE KEY UPDATE name = '$name', data = '$data', date_m = '".time()."'");
 
-	ls_remote_update($id, $name, $data, constant("DELEGATE_URL1"));
-	
+	// changed by jack
+	global $delegate_urls;
+	foreach($delegate_urls as $url){
+		ls_remote_update($id, $name, $data, $url);
+	}
+
 	// Return the slider ID
 	echo $wpdb->insert_id ? $wpdb->insert_id : $id;
 	die();
 }
 
 
-
+// changed by jack
 function ls_remote_update($id, $name, $data, $site){
 	
 	$postdata = http_build_query(
@@ -334,8 +338,7 @@ function ls_remote_update($id, $name, $data, $site){
 			$context
 	);
 	
-	error_log($site . '/update_remote_layer_slider/');
-	
+	error_log($site . '/update_remote_layer_slider/');	
 	error_log($response);
 }
 

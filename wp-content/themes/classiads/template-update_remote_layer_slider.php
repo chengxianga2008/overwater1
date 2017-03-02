@@ -26,7 +26,7 @@
 	$slider_data = stripslashes($_POST["slider_data"]);
 	
 	global $wpdb;
-	$table_name = $wpdb->prefix . constant("LS_DB_TABLE");
+	$table_name = $wpdb->prefix . "layerslider";
 	
 	$wpdb->query("INSERT INTO $table_name (id, name, data, date_c, date_m) VALUES ('$slider_id', '$slider_name', '{}', '".time()."', '".time()."')
 			ON DUPLICATE KEY UPDATE name = '$slider_name', data = '$slider_data', date_m = '".time()."'");
