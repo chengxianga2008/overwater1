@@ -1,0 +1,227 @@
+/*------------------------------------*\
+	Theme Name: ClassiAds - WordPress Classified Ads Theme
+	Date: October 2014 
+	Description: WordPress Classified Ads Theme. 
+	Version: 1.2.2
+	Author: Designinvento 
+	Author URI: http://designinvento.com 
+	License: Commercial
+	Theme URI: 
+	License URI: http://www.gnu.org/licenses/gpl-3.0.html
+	Tags: one-column, two-columns, left-sidebar, right-sidebar,fluid-layout,fixed-layout,responsive-layout, custom-menu, full-width-template, rtl-language-support, sticky-post, theme-options, translation-ready
+/*------------------------------------*/
+
+
+ /* Box Book NOW */
+
+
+h17 {
+	margin-top: -9px;
+	margin-bottom: -15px;
+	padding: 0;
+	border: 0;
+	vertical-align: baseline;
+	font-family: 'arial', sans-serif;
+	font-weight: normal; 
+	font-size: 10px;
+	font-weight: 300;
+	
+
+}
+
+
+
+
+.travelimage { 
+   position: relative; 
+   width: 100%; /* for IE 6 */
+   padding: 25px; 
+}
+
+h32 { 
+   position: absolute; 
+   top: 135px; 
+   center: 0; 
+   width: 100%; 
+}
+
+h32 span { 
+   color: white; 
+   font: bold 20px/40px Arial, Sans-Serif; 
+   letter-spacing: 4px;  
+   background: rgb(251, 50, 69); /* fallback color */
+   background: rgba(251, 50, 69, 0.7);
+   padding: 10px; 
+}
+
+h32 span.spacer {
+   padding:0 15px;
+}
+
+
+
+.site-info {
+	width: 100%;
+	margin-bottom: 0px;
+	text-align: center;
+}
+
+
+ /* Box News */
+        .highlights {
+            width: 100%;
+            background-color: #efefef;
+            border: 2px;
+	    border-color: #fff;
+	display:inline-block;
+            
+        }
+        
+        .highlights h3 {
+            height: 0px;
+            margin: 6px 6px 0px 6px;
+            line-height: 0px;
+            letter-spacing: 0px;
+	display:inline-block;
+        }
+        
+        .highlights h3 span {
+            padding-left: 0px;
+            margin-left: 0px;
+        }
+        
+        .hl-col {
+            width: 750px;
+            float: left;
+            margin-left: 20px;
+            _margin-left: 15px; /* hack para el puñetero IE6 */	
+	display:inline-block;
+	padding: 15px;
+        }
+        
+        .hl-content {
+            margin: 0 0px 0px 0px;
+            float: right;
+	    margin-left: 0px;
+	    display:inline-block;
+		padding: 5px;
+
+        }
+        
+        .hl-content p, .hl-col p {
+            margin: 1em 0;
+        }
+
+	
+
+
+       
+    /* LINKTIPS */
+/* Popup Tipped */
+
+.linkTip { color: #484848 !important; border-bottom: 1px dotted #646464; cursor: pointer }
+
+	.linkTip.red { border-bottom-color: #0086ac; }
+
+	.linkTip:hover { text-decoration: none !important }
+
+.linkTipLight { border-bottom: 1px dotted #BBB; cursor: pointer }
+
+/*.globalTip:not(.product5) { padding: 5px 10px 5px 5px; line-height: 17px; position: relative; }
+
+
+	.globalTip.whyThis .tooltipTitle { padding-bottom: 0; }*/
+
+
+
+.shopping_cart_index .globalTip { padding: 10px 10px 5px }
+
+.globalTip.whyThis { padding: 7px 5px 5px 5px !important; line-height: 17px; position: relative; }
+
+.globalTip.whyThis p { margin-bottom: 0; }
+
+.savingsTip { padding: 10px 10px 5px 35px; line-height: 17px; position: relative; }
+
+.savingsImg { position: absolute; top: -12px; left: -17px; }
+
+	.globalTip.product5 > p, .globalTip > p, .backorder_tip > p { margin-bottom: 5px }
+	
+		.globalTip > p { line-height: 16px; }
+
+			.globalTip > p:last-child { margin-bottom: 0; }
+
+		.globalTip > p > b, .globalTip > p > strong { font-size: 12px; }
+
+	.globalTip.product5 .tooltipTitle { margin-top: 5px; }
+
+	.globalTip.product5 { padding: 0!important; }
+
+	.tipFixSpacing > .tooltipTitle {  }
+
+	.tipFixSpacing > p { margin-bottom: 5px; }
+
+	.tooltipTitle { margin-top: 5px; }
+
+	.tooltipTitle.clearTop { margin-top: 0 }
+
+
+.backorder_tip { padding: 15px 5px 15px 80px; background:url(/images/register/back-order-icon.png) no-repeat 10px 15px; }
+
+.domainRegTip { padding: 12px 20px 15px 20px; }
+
+	.domainRegTip p { margin:10px 0 5px; }
+
+	.backorderStep { width: 191px; float: left; margin-right: 40px; margin-top: 185px; }
+
+	/* Flat Tooltip */
+
+.t_Content_flat { padding: 10px 15px; margin: -1px 0 0 -1px; }
+
+ .t_Content_flat_red_border{ padding: 11px 16px; margin: -1px 0 0 -1px; }
+
+.t_Content_flat .backorder_tip strong, .t_Content_flat_red_border .backorder_tip strong { font-size: 13px!important; }
+
+.t_Tooltip_flat .t_Skin { border: none!important; }
+
+	.t_Tooltip_flat .t_Content { border-radius: 4px; }
+
+.tooltip_domain_certification { font-size: 12px; }
+
+.tooltipTitle { font-size: 13px!important; padding-bottom: 5px; display: inline-block; }
+
+/*.tooltip_auto_renewal { font-size: 12px!important; }*/
+
+.travel-style .book-now {
+  width: 190px;
+  display: inline-block;
+  background-color: #fff;
+  color: #fd4158 !important;
+  text-align: center;
+  cursor: pointer;
+  text-decoration: none;
+  margin-right: 15px;
+}
+
+.travel-style .travel-h3 {
+  margin-bottom: -20px;
+  margin-top: 40px;
+  text-transform: uppercase !important;
+  font-size: 25px !important;
+}
+table.quote_bubble {
+    background-color:  #535155 !important;
+}
+td.concenter
+{
+ background-color:  #535155 !important;
+}
+#templatemo_banner_top {
+    height: 60px !important !important;
+    background-color: #f5f5f5 !important;
+    left: 0 ;
+    min-height: 61px;
+    position: fixed !important;
+    top: 0px !important;
+    width: 100% !important;
+    z-index: 999 !important;
+}

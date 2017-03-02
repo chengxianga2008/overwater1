@@ -1,0 +1,25 @@
+.buton_custom {
+
+    background: #0088cc;
+
+    font-family: arial;
+
+    padding: 10px;
+
+    text-decoration: none;
+
+margin-right:5%;
+
+}
+
+.buton_custom:hover {
+
+    text-decoration: none;
+
+}
+
+.mob_txt strong {
+
+    color: #0088cc;
+
+}
