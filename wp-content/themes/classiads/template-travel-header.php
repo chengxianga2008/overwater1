@@ -273,7 +273,7 @@ DOC;
     <meta name="author" content="">
     <meta name="contact" content="reservations@overwaterbungalows.com.au" />
     <meta name="copyright" content="Copyright (c)<?php echo date("Y"); ?> Overwater Bungalows. All Rights Reserved." />
-    <meta name="keywords" content="overwater, bungalow, honeymoon, love, package, cheap, deal" />
+<!--     <meta name="keywords" content="overwater, bungalow, honeymoon, love, package, cheap, deal" /> -->
     <!-- Favicon-->
     
     <!-- Google Tag Manager -->
