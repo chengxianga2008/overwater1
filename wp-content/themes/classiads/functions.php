@@ -987,15 +987,15 @@ function TW_register_required_plugins() {
 
     	
         // Layer SLider
-        array(
-            'name' => 'LayerSlider WP',
-            'slug' => 'LayerSlider',
-            'source' => get_stylesheet_directory() . '/inc/plugins/layersliderwp-5.0.2.installable.zip',
-            'required' => false,
-            'version' => '5.0.2',
-            'force_activation' => true,
-            'force_deactivation' => true
-        )
+//         array(
+//             'name' => 'LayerSlider WP',
+//             'slug' => 'LayerSlider',
+//             'source' => get_stylesheet_directory() . '/inc/plugins/layersliderwp-5.0.2.installable.zip',
+//             'required' => false,
+//             'version' => '5.0.2',
+//             'force_activation' => true,
+//             'force_deactivation' => true
+//         )
 
         // Ratings
 //         array(

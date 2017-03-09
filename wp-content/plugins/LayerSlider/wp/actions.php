@@ -338,8 +338,8 @@ function ls_remote_update($id, $name, $data, $site){
 			$context
 	);
 	
-	error_log($site . '/update_remote_layer_slider/');	
-	error_log($response);
+// 	error_log($site . '/update_remote_layer_slider/');	
+// 	error_log($response);
 }
 
 
