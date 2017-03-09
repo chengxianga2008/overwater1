@@ -1,39 +1,45 @@
 <?php
 
-	global $LSC;
+	if(!defined('LS_ROOT_FILE')) {
+		header('HTTP/1.0 403 Forbidden');
+		exit;
+	}
+
+	// Attempt to avoid memory limit issues
+	@ini_set( 'memory_limit', '256M' );
 
 	// Get the IF of the slider
 	$id = (int) $_GET['id'];
 
 	// Get slider
-	$slider = lsSliderById($id);
-	$slider = $slider['data'];
+	$sliderItem = LS_Sliders::find($id);
+	$slider = $sliderItem['data'];
 
-	if(function_exists( 'wp_enqueue_media' )) {
-		$uploadClass = 'ls-mass-upload';
-	} else {
-		$uploadClass = 'ls-upload';
-	}
 
 	// Get screen options
 	$lsScreenOptions = get_option('ls-screen-options', '0');
 	$lsScreenOptions = ($lsScreenOptions == 0) ? array() : $lsScreenOptions;
 	$lsScreenOptions = is_array($lsScreenOptions) ? $lsScreenOptions : unserialize($lsScreenOptions);
 
-	// Defaults
-	if(!isset($lsScreenOptions['showTooltips'])) {
+	// Defaults: tooltips
+	if( ! isset($lsScreenOptions['showTooltips'])) {
 		$lsScreenOptions['showTooltips'] = 'true';
 	}
 
+	// Deafults: keyboard shortcuts
+	if( ! isset($lsScreenOptions['useKeyboardShortcuts'])) {
+		$lsScreenOptions['useKeyboardShortcuts'] = 'true';
+	}
+
 	// Get phpQuery
-	if(!class_exists('phpQuery')) {
+	if( ! defined('LS_phpQuery') ) {
+		libxml_use_internal_errors(true);
 		include LS_ROOT_PATH.'/helpers/phpQuery.php';
 	}
 
 	// Get defaults
 	include LS_ROOT_PATH . '/config/defaults.php';
 	include LS_ROOT_PATH . '/helpers/admin.ui.tools.php';
-
 
 	// Run filters
 	if(has_filter('layerslider_override_defaults')) {
@@ -53,69 +59,304 @@
 		$slider['layers'][0]['properties'] = array();
 	}
 
+	// Get google fonts
+	$googleFonts = get_option('ls-google-fonts', array() );
+
 	// Get post types
-	$postTypes = $LSC->posts->getPostTypes();
+	$postTypes = LS_Posts::getPostTypes();
 	$postCategories = get_categories();
 	$postTags = get_tags();
 	$postTaxonomies = get_taxonomies(array('_builtin' => false), 'objects');
 ?>
 <div id="ls-screen-options" class="metabox-prefs hidden">
 	<div id="screen-options-wrap" class="hidden">
-		<form id="ls-screen-options-form" action="<?php echo $_SERVER['REQUEST_URI']?>" method="post">
-			<h5><?php _e('Show on screen', 'LayerSlider') ?></h5>
+		<form id="ls-screen-options-form" method="post">
+			<h5><?php _e('Use features', 'LayerSlider') ?></h5>
 			<label>
 				<input type="checkbox" name="showTooltips"<?php echo $lsScreenOptions['showTooltips'] == 'true' ? ' checked="checked"' : ''?>> Tooltips
+			</label>
+			<label>
+				<input type="checkbox" name="useKeyboardShortcuts"<?php echo $lsScreenOptions['useKeyboardShortcuts'] == 'true' ? ' checked="checked"' : ''?>> Keyboard shortcuts
 			</label>
 		</form>
 	</div>
 	<div id="screen-options-link-wrap" class="hide-if-no-js screen-meta-toggle">
-		<a href="#screen-options-wrap" id="show-settings-link" class="show-settings"><?php _e('Screen Options', 'LayerSlider') ?></a>
+		<button type="button" id="show-settings-link" class="button show-settings" aria-controls="screen-options-wrap" aria-expanded="false"><?php _e('Screen Options', 'LayerSlider') ?></button>
 	</div>
 </div>
 
-<?php include LS_ROOT_PATH . '/views/slider_edit_sample.php'; ?>
-<form action="<?php echo $_SERVER['REQUEST_URI']?>" method="post" class="wrap" id="ls-slider-form" novalidate="novalidate">
+<!-- Load templates -->
+<?php
+include LS_ROOT_PATH . '/templates/tmpl-share-sheet.php';
+include LS_ROOT_PATH . '/templates/tmpl-layer-item.php';
+include LS_ROOT_PATH . '/templates/tmpl-static-layer-item.php';
+include LS_ROOT_PATH . '/templates/tmpl-layer.php';
+include LS_ROOT_PATH . '/templates/tmpl-transition-window.php';
+
+?>
+
+<!-- Load slide template -->
+<script type="text/html" id="ls-slide-template">
+	<?php include LS_ROOT_PATH . '/templates/tmpl-slide.php'; ?>
+</script>
+
+<!-- Slider JSON data source -->
+<?php
+
+	if( ! isset($slider['properties']['status']) ) {
+		$slider['properties']['status'] = true;
+	}
+
+	// COMPAT: If old and non-fullwidth slider
+	if( ! isset($slider['properties']['slideBGSize']) && ! isset($slider['properties']['new']) ) {
+		if( empty( $slider['properties']['forceresponsive'] ) ) {
+			$slider['properties']['slideBGSize'] = 'auto';
+		}
+	}
+
+	$slider['properties']['schedule_start'] = '';
+	$slider['properties']['schedule_end'] = '';
+
+	if( ! empty( $sliderItem['schedule_start'] ) ) {
+		$slider['properties']['schedule_start'] = (int) $sliderItem['schedule_start'];
+	}
+
+	if( ! empty( $sliderItem['schedule_end'] ) ) {
+		$slider['properties']['schedule_end'] = (int) $sliderItem['schedule_end'];
+	}
+
+	// Get yourLogo
+	if( ! empty($slider['properties']['yourlogoId']) ) {
+		$slider['properties']['yourlogo'] = apply_filters('ls_get_image', $slider['properties']['yourlogoId'], $slider['properties']['yourlogo']);
+		$slider['properties']['yourlogoThumb'] = apply_filters('ls_get_thumbnail', $slider['properties']['yourlogoId'], $slider['properties']['yourlogo']);
+	}
+
+
+	$slider['properties']['cbinit'] = !empty($slider['properties']['cbinit']) ? stripslashes($slider['properties']['cbinit']) : $lsDefaults['slider']['cbInit']['value'];
+	$slider['properties']['cbstart'] = !empty($slider['properties']['cbstart']) ? stripslashes($slider['properties']['cbstart']) : $lsDefaults['slider']['cbStart']['value'];
+	$slider['properties']['cbstop'] = !empty($slider['properties']['cbstop']) ? stripslashes($slider['properties']['cbstop']) : $lsDefaults['slider']['cbStop']['value'];
+	$slider['properties']['cbpause'] = !empty($slider['properties']['cbpause']) ? stripslashes($slider['properties']['cbpause']) : $lsDefaults['slider']['cbPause']['value'];
+	$slider['properties']['cbanimstart'] = !empty($slider['properties']['cbanimstart']) ? stripslashes($slider['properties']['cbanimstart']) : $lsDefaults['slider']['cbAnimStart']['value'];
+	$slider['properties']['cbanimstop'] = !empty($slider['properties']['cbanimstop']) ? stripslashes($slider['properties']['cbanimstop']) : $lsDefaults['slider']['cbAnimStop']['value'];
+	$slider['properties']['cbprev'] = !empty($slider['properties']['cbprev']) ? stripslashes($slider['properties']['cbprev']) : $lsDefaults['slider']['cbPrev']['value'];
+	$slider['properties']['cbnext'] = !empty($slider['properties']['cbnext']) ? stripslashes($slider['properties']['cbnext']) : $lsDefaults['slider']['cbNext']['value'];
+
+
+	if( empty($slider['properties']['new']) && empty($slider['properties']['type']) ) {
+		if( !empty($slider['properties']['forceresponsive']) ) {
+			$slider['properties']['type'] = 'fullwidth';
+
+			if( strpos($slider['properties']['width'], '%') !== false ) {
+
+				if( ! empty($slider['properties']['responsiveunder']) ) {
+					$slider['properties']['width'] = $slider['properties']['responsiveunder'];
+
+				} elseif( ! empty($slider['properties']['sublayercontainer']) ) {
+					$slider['properties']['width'] = $slider['properties']['sublayercontainer'];
+				}
+			}
+
+		} elseif( empty($slider['properties']['responsive']) ) {
+			$slider['properties']['type'] = 'fixedsize';
+		} else {
+			$slider['properties']['type'] = 'responsive';
+		}
+	}
+
+	if( ! empty( $slider['properties']['width'] ) ) {
+		if( strpos($slider['properties']['width'], '%') !== false ) {
+			$slider['properties']['width'] = 1000;
+		}
+	}
+
+	if( ! empty($slider['properties']['sublayercontainer']) ) {
+		unset($slider['properties']['sublayercontainer']);
+	}
+
+	if( ! empty( $slider['properties']['width'] ) ) {
+		$slider['properties']['width'] = (int) $slider['properties']['width'];
+	}
+
+	if( ! empty( $slider['properties']['width'] ) ) {
+		$slider['properties']['height'] = (int) $slider['properties']['height'];
+	}
+
+	if( empty( $slider['properties']['pauseonhover'] ) ) {
+		$slider['properties']['pauseonhover'] = 'enabled';
+	}
+
+	if( empty($slider['properties']['sliderVersion'] ) && empty($slider['properties']['circletimer'] ) ) {
+		$slider['properties']['circletimer'] = false;
+	}
+
+	// Convert old checkbox values
+	foreach($slider['properties'] as $optionKey => $optionValue) {
+		switch($optionValue) {
+			case 'on':
+				$slider['properties'][$optionKey] = true;
+				break;
+
+			case 'off':
+				$slider['properties'][$optionKey] = false;
+				break;
+		}
+	}
+
+	foreach($slider['layers'] as $slideKey => $slideVal) {
+
+		// Get slide background
+		if( ! empty($slideVal['properties']['backgroundId']) ) {
+			$slideVal['properties']['background'] = apply_filters('ls_get_image', $slideVal['properties']['backgroundId'], $slideVal['properties']['background']);
+			$slideVal['properties']['backgroundThumb'] = apply_filters('ls_get_thumbnail', $slideVal['properties']['backgroundId'], $slideVal['properties']['background']);
+		}
+
+		// Get slide thumbnail
+		if( ! empty($slideVal['properties']['thumbnailId']) ) {
+			$slideVal['properties']['thumbnail'] = apply_filters('ls_get_image', $slideVal['properties']['thumbnailId'], $slideVal['properties']['thumbnail']);
+			$slideVal['properties']['thumbnailThumb'] = apply_filters('ls_get_thumbnail', $slideVal['properties']['thumbnailId'], $slideVal['properties']['thumbnail']);
+		}
+
+
+		$slider['layers'][$slideKey] = $slideVal;
+
+		if(!empty($slideVal['sublayers']) && is_array($slideVal['sublayers'])) {
+
+			// v6.0: Reverse layers list
+			$slideVal['sublayers'] = array_reverse($slideVal['sublayers']);
+
+			foreach($slideVal['sublayers'] as $layerKey => $layerVal) {
+
+				if( ! empty($layerVal['imageId']) ) {
+					$layerVal['image'] = apply_filters('ls_get_image', $layerVal['imageId'], $layerVal['image']);
+					$layerVal['imageThumb'] = apply_filters('ls_get_thumbnail', $layerVal['imageId'], $layerVal['image']);
+				}
+
+				if( ! empty($layerVal['posterId']) ) {
+					$layerVal['poster'] = apply_filters('ls_get_image', $layerVal['posterId'], $layerVal['poster']);
+					$layerVal['posterThumb'] = apply_filters('ls_get_thumbnail', $layerVal['posterId'], $layerVal['poster']);
+				}
+
+				// Ensure that magic quotes will not mess with JSON data
+				if(function_exists('get_magic_quotes_gpc') && get_magic_quotes_gpc()) {
+					$layerVal['styles'] = stripslashes($layerVal['styles']);
+					$layerVal['transition'] = stripslashes($layerVal['transition']);
+				}
+
+				// Parse embedded JSON data
+				$layerVal['styles'] = !empty($layerVal['styles']) ? (object) json_decode(stripslashes($layerVal['styles']), true) : new stdClass;
+				$layerVal['transition'] = !empty($layerVal['transition']) ? (object) json_decode(stripslashes($layerVal['transition']), true) : new stdClass;
+				$layerVal['html'] = !empty($layerVal['html']) ? stripslashes($layerVal['html']) : '';
+
+				// Add 'top', 'left' and 'wordwrap' to the styles object
+				if(isset($layerVal['top'])) { $layerVal['styles']->top = $layerVal['top']; unset($layerVal['top']); }
+				if(isset($layerVal['left'])) { $layerVal['styles']->left = $layerVal['left']; unset($layerVal['left']); }
+				if(isset($layerVal['wordwrap'])) { $layerVal['styles']->wordwrap = $layerVal['wordwrap']; unset($layerVal['wordwrap']); }
+
+				if( ! empty( $layerVal['transition']->showuntil ) ) {
+
+					$layerVal['transition']->startatout = 'transitioninend + '.$layerVal['transition']->showuntil;
+					$layerVal['transition']->startatouttiming = 'transitioninend';
+					$layerVal['transition']->startatoutvalue = $layerVal['transition']->showuntil;
+					unset($layerVal['transition']->showuntil);
+				}
+
+				if( ! empty( $layerVal['transition']->parallaxlevel ) ) {
+					$layerVal['transition']->parallax = true;
+				}
+
+				// Custom attributes
+				$layerVal['innerAttributes'] = !empty($layerVal['innerAttributes']) ?  (object) $layerVal['innerAttributes'] : new stdClass;
+				$layerVal['outerAttributes'] = !empty($layerVal['outerAttributes']) ?  (object) $layerVal['outerAttributes'] : new stdClass;
+
+				$slider['layers'][$slideKey]['sublayers'][$layerKey] = $layerVal;
+			}
+		} else {
+			$slider['layers'][$slideKey]['sublayers'] = array();
+		}
+	}
+
+	if( ! empty( $slider['callbacks'] ) ) {
+		foreach( $slider['callbacks'] as $key => $callback ) {
+			$slider['callbacks'][$key] = stripslashes($callback);
+		}
+	}
+
+	// Slider version
+	$slider['properties']['sliderVersion'] = LS_PLUGIN_VERSION;
+?>
+
+<!-- Get slider data from DB -->
+<script type="text/javascript">
+
+	// Slider data
+	window.lsSliderData = <?php echo json_encode($slider) ?>;
+
+	// Plugin path
+	var pluginPath = '<?php echo LS_ROOT_URL ?>/static/';
+	var lsTrImgPath = '<?php echo LS_ROOT_URL ?>/static/admin/img/';
+
+	// Screen options
+	var lsScreenOptions = <?php echo json_encode($lsScreenOptions) ?>;
+</script>
+
+
+
+<form method="post" id="ls-slider-form" novalidate="novalidate" autocomplete="off">
 
 	<input type="hidden" name="slider_id" value="<?php echo $id ?>">
 	<input type="hidden" name="action" value="ls_save_slider">
+	<?php wp_nonce_field('ls-save-slider-' . $id); ?>
 
-	<!-- Title -->
-	<h2>
-		<?php _e('Editing slider:', 'LayerSlider') ?>
-		<?php echo apply_filters('ls_slider_title', $slider['properties']['title'], 35) ?>
-		<a href="?page=layerslider" class="add-new-h2"><?php _e('Back to the list', 'LayerSlider') ?></a>
-	</h2>
+	<div class="wrap">
 
-	<!-- Main menu bar -->
-	<div id="ls-main-nav-bar">
-		<a href="#" class="settings <?php echo $settingsTabClass ?>">
-			<span><?php _e('Slider Settings', 'LayerSlider') ?></span>
-		</a>
-		<a href="#" class="layers <?php echo $slidesTabClass ?>">
-			<span><?php _e('Slides', 'LayerSlider') ?></span>
-		</a>
-		<a href="#" class="callbacks">
-			<span><?php _e('Event Callbacks', 'LayerSlider') ?></span>
-		</a>
-		<a href="http://support.kreaturamedia.com/faq/4/layerslider-for-wordpress/" target="_blank" class="faq right unselectable">
-			<span><?php _e('FAQ', 'LayerSlider') ?></span>
-		</a>
-		<a href="#" class="support right unselectable">
-			<span><?php _e('Documentation', 'LayerSlider') ?></span>
-		</a>
-		<span class="right help"><?php _e('Need help? Try these:', 'LayerSlider') ?></span>
-		<a href="#" class="clear unselectable"></a>
+		<!-- Title -->
+		<h2>
+			<?php _e('Editing slider:', 'LayerSlider') ?>
+			<?php $sliderName = !empty($slider['properties']['title']) ? $slider['properties']['title'] : 'Unnamed'; ?>
+			<?php echo apply_filters('ls_slider_title', $sliderName, 30) ?>
+			<a href="?page=layerslider" class="add-new-h2"><?php _e('Back to the list', 'LayerSlider') ?></a>
+		</h2>
+
+		<!-- Version number -->
+		<?php include LS_ROOT_PATH . '/templates/tmpl-beta-feedback.php'; ?>
+
+		<!-- Main menu bar -->
+		<div id="ls-main-nav-bar">
+			<a href="#" class="settings <?php echo $settingsTabClass ?>">
+				<i class="dashicons dashicons-admin-tools"></i>
+				<?php _e('Slider Settings', 'LayerSlider') ?>
+			</a>
+			<a href="#" class="layers <?php echo $slidesTabClass ?>">
+				<i class="dashicons dashicons-images-alt"></i>
+				<?php _e('Slides', 'LayerSlider') ?>
+			</a>
+			<a href="#" class="callbacks">
+				<i class="dashicons dashicons-redo"></i>
+				<?php _e('Event Callbacks', 'LayerSlider') ?>
+			</a>
+			<a href="https://support.kreaturamedia.com/faq/4/layerslider-for-wordpress/" target="_blank" class="faq right unselectable">
+				<i class="dashicons dashicons-sos"></i>
+				<?php _e('FAQ', 'LayerSlider') ?>
+			</a>
+			<a href="https://support.kreaturamedia.com/docs/layersliderwp/documentation.html" target="_blank" class="support right unselectable">
+				<i class="dashicons dashicons-editor-help"></i>
+				<?php _e('Documentation', 'LayerSlider') ?>
+			</a>
+			<span class="right help"><?php _e('Need help? Try these: ', 'LayerSlider') ?></span>
+			<a href="#" class="clear unselectable"></a>
+		</div>
+
 	</div>
 
 	<!-- Post options -->
-	<?php include LS_ROOT_PATH . '/views/slider_edit_posts.php'; ?>
+	<?php include LS_ROOT_PATH . '/templates/tmpl-post-options.php'; ?>
 
 	<!-- Pages -->
 	<div id="ls-pages">
 
 		<!-- Slider Settings -->
 		<div class="ls-page ls-settings ls-slider-settings <?php echo $settingsTabClass ?>">
-			<?php include LS_ROOT_PATH . '/views/slider_edit_settings.php'; ?>
+			<?php include LS_ROOT_PATH . '/templates/tmpl-slider-settings.php'; ?>
 		</div>
 
 		<!-- Slides -->
@@ -123,521 +364,289 @@
 
 			<!-- Slide tabs -->
 			<div id="ls-layer-tabs">
-				<?php foreach($slider['layers'] as $key => $layer) : ?>
-				<?php $active = empty($key) ? 'active' : '' ?>
-				<a href="#" class="<?php echo $active ?>">Slide #<?php echo ($key+1) ?><span>x</span></a>
+				<?php
+					foreach($slider['layers'] as $key => $layer) :
+					$active = empty($key) ? 'active' : '';
+					$name = !empty($layer['properties']['title']) ? $layer['properties']['title'] : 'Slide #'.($key+1);
+					$bgImage = !empty($layer['properties']['background']) ? $layer['properties']['background'] : null;
+					$bgImageId = !empty($layer['properties']['backgroundId']) ? $layer['properties']['backgroundId'] : null;
+					$image = apply_filters('ls_get_image', $bgImageId, $bgImage, true);
+				?>
+				<a href="#" class="<?php echo $active ?>" data-help="<div style='background-image: url(<?php echo $image?>);'></div>" data-help-class="ls-slide-preview-tooltip popover-light ls-popup" data-help-delay="1" data-help-transition="false">
+					<span><?php echo $name ?></span>
+					<span class="dashicons dashicons-dismiss"></span>
+				</a>
 				<?php endforeach; ?>
-				<a href="#" class="unsortable" id="ls-add-layer"><?php _e('Add new slide', 'LayerSlider') ?></a>
+				<a href="#"  title="<?php _e('Add new slide', 'LayerSlider') ?>" class="unsortable" id="ls-add-layer"><i class="dashicons dashicons-plus"></i></a>
 				<div class="unsortable clear"></div>
 			</div>
 
 			<!-- Slides -->
-			<div id="ls-layers">
-				<?php if(!empty($slider['layers'])) : ?>
-				<?php foreach($slider['layers'] as $key => $layer) : ?>
-				<?php
-					$layerProps = $layer['properties'];
-					$active = empty($key) ? 'active' : '';
-					$layerProps['background'] = !empty($layerProps['background']) ? $layerProps['background'] : null;
-					$layerProps['backgroundId'] = !empty($layerProps['backgroundId']) ? $layerProps['backgroundId'] : null;
-					$layerProps['thumbnailId'] = !empty($layerProps['thumbnailId']) ? $layerProps['thumbnailId'] : null;
-					$layerProps['thumbnail'] = !empty($layerProps['thumbnail']) ? $layerProps['thumbnail'] : null;
-				?>
-				<div class="ls-box ls-layer-box <?php echo $active ?>">
-					<input type="hidden" name="layerkey" value="0">
-					<table>
-						<thead class="ls-layer-options-thead">
-							<tr>
-								<td colspan="7">
-									<span id="ls-icon-layer-options"></span>
-									<h4>
-										<?php _e('Slide Options', 'LayerSlider') ?>
-										<a href="#" class="duplicate ls-layer-duplicate"><?php _e('Duplicate this slide', 'LayerSlider') ?></a>
-									</h4>
-								</td>
-							</tr>
-						</thead>
-						<tbody class="ls-slide-options">
-							<input type="hidden" name="post_offset" value="<?php echo isset($layerProps['post_offset']) ? $layerProps['post_offset'] : '-1' ?>">
-							<input type="hidden" name="3d_transitions" value="<?php echo isset($layerProps['3d_transitions']) ? $layerProps['3d_transitions'] : '' ?>">
-							<input type="hidden" name="2d_transitions" value="<?php echo isset($layerProps['2d_transitions']) ? $layerProps['2d_transitions'] : '' ?>">
-							<input type="hidden" name="custom_3d_transitions" value="<?php echo isset($layerProps['custom_3d_transitions']) ? $layerProps['custom_3d_transitions'] : '' ?>">
-							<input type="hidden" name="custom_2d_transitions" value="<?php echo isset($layerProps['custom_2d_transitions']) ? $layerProps['custom_2d_transitions'] : '' ?>">
-							<tr class="black">
-								<td colspan="2" class="right">
-									<?php _e('Choose slide image', 'LayerSlider') ?><br>
-									<?php _e('or', 'LayerSlider') ?> <a href="#" class="ls-url-prompt"><?php _e('enter URL', 'LayerSlider') ?></a>
-								</td>
-								<td>
-									<input type="hidden" name="backgroundId" value="<?php echo !empty($layerProps['backgroundId']) ? $layerProps['backgroundId'] : '' ?>">
-									<input type="hidden" name="background" value="<?php echo !empty($layerProps['background']) ? $layerProps['background'] : '' ?>">
-									<div class="ls-image ls-upload" data-help="<?php echo $lsDefaults['slides']['image']['tooltip'] ?>">
-										<div><img src="<?php echo apply_filters('ls_get_thumbnail', $layerProps['backgroundId'], $layerProps['background']) ?>" alt=""></div>
-										<a href="#">x</a>
-									</div>
-								</td>
-								<td class="right">
-									<?php _e('Choose thumbnail', 'LayerSlider') ?><br>
-									<?php _e('or', 'LayerSlider') ?> <a href="#" class="ls-url-prompt"><?php _e('enter URL', 'LayerSlider') ?></a>
-								</td>
-								<td>
-									<input type="hidden" name="thumbnailId" value="<?php echo !empty($layerProps['thumbnailId']) ? $layerProps['thumbnailId'] : '' ?>">
-									<input type="hidden" name="thumbnail" value="<?php echo !empty($layerProps['thumbnail']) ? $layerProps['thumbnail'] : '' ?>">
-									<div class="ls-image ls-upload" data-help="<?php echo $lsDefaults['slides']['thumbnail']['tooltip'] ?>">
-										<div><img src="<?php echo apply_filters('ls_get_thumbnail', $layerProps['thumbnailId'], $layerProps['thumbnail']) ?>" alt=""></div>
-										<a href="#">x</a>
-									</div>
-								</td>
-								<td class="right"></td>
-								<td>
-									<span style="margin-left: 25px;"><?php echo $lsDefaults['slides']['delay']['name'] ?></span> <br>
-									<?php lsGetInput($lsDefaults['slides']['delay'], $layerProps, array('class' => 'layerprop')) ?> ms
-								</td>
-							</tr>
-							<tr>
-								<td class="right"><?php _e('Slide transition', 'LayerSlider') ?></td>
-								<td></td>
-								<td><button class="button ls-select-transitions new" data-help="<?php _e('You can select your desired slide transitions by clicking on this button.', 'LayerSlider') ?>">Select transitions</button></td>
-								<td class="right"><?php echo $lsDefaults['slides']['timeshift']['name'] ?></td>
-								<td colspan="3"><?php lsGetInput($lsDefaults['slides']['timeshift'], $layerProps, array('class' => 'layerprop')) ?> ms</td>
-							</tr>
-							<tr>
-								<td class="right"><?php _e('Link this slide', 'LayerSlider'); ?></td>
-								<td class="right"><?php echo $lsDefaults['slides']['linkUrl']['name'] ?></td>
-								<td colspan="3"><?php lsGetInput($lsDefaults['slides']['linkUrl'], $layerProps, array('class' => 'ls-linkfield')) ?></td>
-								<td></td>
-								<td><?php lsGetSelect($lsDefaults['slides']['linkTarget'], $layerProps) ?></td>
-							</tr>
-							<tr>
-								<td class="right"><?php _e('Misc', 'LayerSlider') ?></td>
-								<td class="right"><?php echo $lsDefaults['slides']['ID']['name'] ?></td>
-								<td><?php lsGetInput($lsDefaults['slides']['ID'], $layerProps) ?></td>
-								<td class="right"><?php echo $lsDefaults['slides']['deeplink']['name'] ?></td>
-								<td><?php lsGetInput($lsDefaults['slides']['deeplink'], $layerProps) ?></td>
-								<td class="right"><?php _e('Hidden', 'LayerSlider') ?></td>
-								<td><input type="checkbox" name="skip" class="checkbox" <?php echo isset($layerProps['skip']) ? 'checked="checked"' : '' ?> data-help="<?php _e("If you don't want to use this slide in your front-page, but you want to keep it, you can hide it with this switch.", "LayerSlider") ?>"></td>
-							</tr>
-						</tbody>
-					</table>
-					<table>
-						<thead>
-							<tr>
-								<td>
-									<span id="ls-icon-preview"></span>
-									<h4>
-										<?php _e('Preview', 'LayerSlider') ?>
-										<span class="ls-editor-slider-text">Size:</span>
-										<div class="ls-editor-slider"></div>
-										<span class="ls-editor-slider-val">100%</span>
-									</h4>
-								</td>
-							</tr>
-						</thead>
-						<tbody>
-							<tr>
-								<td class="ls-preview-td">
-									<div class="ls-preview-wrapper">
-										<div class="ls-preview">
-											<div class="draggable ls-layer"></div>
-										</div>
-										<div class="ls-real-time-preview"></div>
-									</div>
-									<button class="button ls-preview-button"><?php _e('Enter Preview', 'LayerSlider') ?></button>
-								</td>
-							</tr>
-						</tbody>
-					</table>
-					<table>
-						<thead>
-							<tr>
-								<td>
-									<span id="ls-icon-sublayers"></span>
-									<h4><?php _e('Layers', 'LayerSlider') ?><a href="#" class="ls-tl-toggle">[ <?php _e('timeline view', 'LayerSlider') ?> ]</a></h4>
-								</td>
-							</tr>
-						</thead>
-						<tbody class="ls-sublayers ls-sublayer-sortable">
-							<?php if(!empty($layer['sublayers'])) : ?>
-							<?php foreach($layer['sublayers'] as $key => $sublayer) : ?>
-							<?php $active = (count($layer['sublayers']) == ($key+1)) ? ' class="active"' : '' ?>
-							<?php $title = empty($sublayer['subtitle']) ? 'Layer #'.($key+1).'' : htmlspecialchars(stripslashes($sublayer['subtitle'])); ?>
-							<tr<?php echo $active ?>>
-								<td>
-									<div class="ls-sublayer-wrapper">
-										<span class="ls-sublayer-sortable-handle dashicons dashicons-menu"></span>
-										<span class="ls-sublayer-number"><?php echo ($key + 1) ?></span>
-										<input type="text" name="subtitle" class="ls-sublayer-title" value="<?php echo $title ?>">
-
-										<div class="ls-tl">
-											<table>
-												<tr>
-													<td data-help="Delay in: " class="ls-tl-delayin"></td>
-													<td data-help="Duration in: " class="ls-tl-durationin"></td>
-													<td data-help="Show Until: " class="ls-tl-showuntil"></td>
-													<td data-help="Duration out: " class="ls-tl-durationout"></td>
-												</tr>
-											</table>
-										</div>
-
-										<span class="ls-sublayer-controls">
-											<span class="ls-highlight dashicons dashicons-lightbulb" data-help="<?php _e('Highlight layer in editor.', 'LayerSlider') ?>"></span>
-											<span class="ls-icon-lock dashicons dashicons-lock" data-help="<?php _e('Prevent layer from dragging in editor.', 'LayerSlider') ?>"></span>
-											<span class="ls-icon-eye dashicons dashicons-visibility" data-help="<?php _e('Hide layer in editor.', 'LayerSlider') ?>"></span>
-										</span>
-										<div class="clear"></div>
-										<div class="ls-sublayer-nav">
-											<a href="#" class="active"><?php _e('Content', 'LayerSlider') ?></a>
-											<a href="#"><?php _e('Transition', 'LayerSlider') ?></a>
-											<a href="#"><?php _e('Link', 'LayerSlider') ?></a>
-											<a href="#"><?php _e('Styles', 'LayerSlider') ?></a>
-											<a href="#"><?php _e('Attributes', 'LayerSlider') ?></a>
-											<a href="#" title="Remove this layer" class="remove">x</a>
-										</div>
-										<div class="ls-sublayer-pages">
-											<div class="ls-sublayer-page ls-sublayer-basic active">
-
-												<!-- Layer Media Type -->
-												<?php
-													if(empty($sublayer['media'])) {
-														switch($sublayer['type']) {
-															case 'img': $sublayer['media'] = 'img'; break;
-															case 'div': $sublayer['media'] = 'html'; break;
-															default: $sublayer['media'] = 'text'; break;
-														}
-													}
-													$sublayer['type'] = ($sublayer['type'] == 'span') ? 'p' : $sublayer['type'];
-													$sublayer['type'] = ($sublayer['type'] == 'img') ? 'p' : $sublayer['type'];
-												?>
-												<input type="hidden" name="media" value="<?php echo $sublayer['media'] ?>">
-												<div class="ls-layer-kind">
-													<ul>
-														<li data-section="img"><span class="ls-icon img"></span><?php _e('Image', 'LayerSlider') ?></li>
-														<li data-section="text"><span class="ls-icon text"></span><?php _e('Text', 'LayerSlider') ?></li>
-														<li data-section="html"><span class="ls-icon video"></span><?php _e('HTML / Video / Audio', 'LayerSlider') ?></li>
-														<li data-section="post"><span class="ls-icon post"></span><?php _e('Dynamic content from posts', 'LayerSlider') ?></li>
-													</ul>
-												</div>
-												<!-- End of Layer Media Type -->
-
-												<!-- Layer Element Type -->
-												<input type="hidden" name="type" value="<?php echo $sublayer['type'] ?>">
-												<ul class="ls-sublayer-element">
-													<li class="ls-type" data-element="p"><span class="ls-icon-p"></span><br><?php _e('Paragraph', 'LayerSlider') ?></li>
-													<li class="ls-type" data-element="h1"><span class="ls-icon-h1"></span><br><?php _e('H1', 'LayerSlider') ?></li>
-													<li class="ls-type" data-element="h2"><span class="ls-icon-h2"></span><br><?php _e('H2', 'LayerSlider') ?></li>
-													<li class="ls-type" data-element="h3"><span class="ls-icon-h3"></span><br><?php _e('H3', 'LayerSlider') ?></li>
-													<li class="ls-type" data-element="h4"><span class="ls-icon-h4"></span><br><?php _e('H4', 'LayerSlider') ?></li>
-													<li class="ls-type" data-element="h5"><span class="ls-icon-h5"></span><br><?php _e('H5', 'LayerSlider') ?></li>
-													<li class="ls-type" data-element="h6"><span class="ls-icon-h6"></span><br><?php _e('H6', 'LayerSlider') ?></li>
-												</ul>
-												<!-- End of Layer Element Type -->
-
-												<div class="ls-layer-sections">
-
-													<!-- Image Layer -->
-													<div class="ls-image-uploader clearfix ls-hidden">
-														<?php $sublayer['imageId'] = !empty($sublayer['imageId']) ? $sublayer['imageId'] : null; ?>
-														<input type="hidden" name="imageId"  value="<?php echo !empty($sublayer['imageId']) ? $sublayer['imageId'] : '' ?>">
-														<input type="hidden" name="image" value="<?php echo !empty($sublayer['image']) ? $sublayer['image'] : '' ?>">
-														<div class="ls-image ls-upload <?php echo $uploadClass ?>">
-															<div><img src="<?php echo apply_filters('ls_get_thumbnail', $sublayer['imageId'], $sublayer['image']) ?>" alt=""></div>
-															<a href="#">x</a>
-														</div>
-														<p>
-															<?php _e('Click on the image preview to open WordPress Media Library or', 'LayerSlider') ?>
-															<a href="#" class="ls-url-prompt"><?php _e('insert from URL', 'LayerSlider') ?></a>
-														</p>
-													</div>
-
-													<!-- Text/HTML Layer -->
-													<div class="ls-html-code">
-														<textarea name="html" cols="50" rows="5" placeholder="Enter layer content here" data-help="<?php _e('Type here the contents of your layer. You can use any HTML codes in this field to insert other contents then text. This field is also shortcode-aware, so you can insert content from other plugins as well as video embed codes.', 'LayerSlider') ?>"><?php echo stripslashes($sublayer['html']) ?></textarea>
-														<p class="ls-hidden">
-															<button class="button ls-upload ls-insert-media">
-																<span class="dashicons dashicons-admin-media"></span>
-																<?php _e('Add Media', 'LayerSlider') ?>
-															</button>
-															<?php _e('Insert self-hosted video or audio', 'LayerSlider') ?>
-														</p>
-													</div>
-
-													<!-- Dynamic Layer -->
-													<div class="ls-post-section ls-hidden">
-														<div class="ls-posts-configured">
-															<ul class="ls-post-placeholders clearfix">
-																<li><span>[post-id]</span></li>
-																<li><span>[post-slug]</span></li>
-																<li><span>[post-url]</span></li>
-																<li><span>[date-published]</span></li>
-																<li><span>[date-modified]</span></li>
-																<li><span>[image]</span></li>
-																<li><span>[image-url]</span></li>
-																<li><span>[title]</span></li>
-																<li><span>[content]</span></li>
-																<li><span>[excerpt]</span></li>
-																<li data-placeholder="<a href=&quot;[post-url]&quot;>Read more</a>"><span>[link]</span></li>
-																<li><span>[author]</span></li>
-																<li><span>[author-id]</span></li>
-																<li><span>[categories]</span></li>
-																<li><span>[tags]</span></li>
-																<li><span>[comments]</span></li>
-															</ul>
-															<p>
-																<?php _e("Click on one or more post placeholders to insert them into your layer's content. Post placeholders are acting like shortcodes in WP, and they will be filled with the actual content from your posts.", "LayerSlider") ?><br>
-																<?php _e('Limit text length (if any)', 'LayerSlider') ?>
-																<input type="number" name="post_text_length" value="<?php echo !empty($sublayer['post_text_length']) ? $sublayer['post_text_length'] : '' ?>">
-																<button class="button ls-configure-posts"><span class="dashicons dashicons-admin-post"></span><?php _e('Configure post options', 'LayerSlider') ?></button>
-															</p>
-														</div>
-													</div>
-												</div>
-											</div>
-											<div class="ls-sublayer-page ls-sublayer-options">
-												<input type="hidden" name="transition">
-												<?php
-													if(!isset($sublayer['transition'])) {
-														switch($sublayer['slidedirection']) {
-															case 'fade': $sublayer['fadein'] = true; $sublayer['offsetxin'] = '0'; $sublayer['offsetyin'] = '0'; break;
-															case 'auto': $sublayer['offsetxin'] = 'right'; $sublayer['offsetyin'] = '0'; break;
-															default:
-																$sublayer['offsetxin'] = ($sublayer['slidedirection'] == 'left' || $sublayer['slidedirection'] == 'right') ? $sublayer['slidedirection'] : 0;
-																$sublayer['offsetyin'] = ($sublayer['slidedirection'] == 'top' || $sublayer['slidedirection'] == 'bottom') ? $sublayer['slidedirection'] : 0;
-																break;
-														}
-
-														switch($sublayer['slideoutdirection']) {
-															case 'fade': $sublayer['fadeout'] = true; $sublayer['offsetxout'] = '0'; $sublayer['offsetyout'] = '0'; break;
-															case 'auto':
-																if($sublayer['slidedirection'] == 'fade') {
-																	$sublayer['fadeout'] = true;
-																	$sublayer['offsetxout'] = '0';
-																} else { $sublayer['offsetxout'] = 'right'; }
-															break;
-															default:
-																$sublayer['offsetxout'] = ($sublayer['slideoutdirection'] == 'left' || $sublayer['slideoutdirection'] == 'right') ? $sublayer['slideoutdirection'] : 0;
-																$sublayer['offsetyout'] = ($sublayer['slideoutdirection'] == 'top' || $sublayer['slideoutdirection'] == 'bottom') ? $sublayer['slideoutdirection'] : 0;
-																break;
-														}
-
-														$sublayer['scalexin'] = $sublayer['scalein'];
-														$sublayer['scaleyin'] = $sublayer['scalein'];
-														$sublayer['scalexout'] = $sublayer['scaleout'];
-														$sublayer['scaleyout'] = $sublayer['scaleout'];
-													}
-
-													$sublayer['transition'] = !empty($sublayer['transition']) ? json_decode(stripslashes($sublayer['transition']), true) : array();
-													$sublayer = array_merge($sublayer, $sublayer['transition']);
-												?>
-												<table>
-													<tbody>
-														<tr>
-															<td rowspan="3"><?php _e('Transition in', 'LayerSlider') ?></td>
-															<td class="right"><?php echo $lsDefaults['layers']['transitionInOffsetX']['name'] ?></td>
-															<td><?php lsGetInput($lsDefaults['layers']['transitionInOffsetX'], $sublayer, array('class' => 'sublayerprop')) ?></td>
-															<td class="right"><?php echo $lsDefaults['layers']['transitionInOffsetY']['name'] ?></td>
-															<td><?php lsGetInput($lsDefaults['layers']['transitionInOffsetY'], $sublayer, array('class' => 'sublayerprop')) ?></td>
-															<td class="right"><?php echo $lsDefaults['layers']['transitionInDuration']['name'] ?></td>
-															<td><?php lsGetInput($lsDefaults['layers']['transitionInDuration'], $sublayer, array('class' => 'sublayerprop')) ?> ms</td>
-															<td class="right"><?php echo $lsDefaults['layers']['transitionInDelay']['name'] ?></td>
-															<td><?php lsGetInput($lsDefaults['layers']['transitionInDelay'], $sublayer, array('class' => 'sublayerprop')) ?> ms</td>
-															<td class="right"><a href="http://easings.net/" target="_blank"><?php echo $lsDefaults['layers']['transitionInEasing']['name'] ?></a></td>
-															<td><?php lsGetSelect($lsDefaults['layers']['transitionInEasing'], $sublayer, array('class' => 'sublayerprop', 'options' => $lsDefaults['easings'])) ?></td>
-														</tr>
-														<tr>
-															<td class="right"><?php echo $lsDefaults['layers']['transitionInFade']['name'] ?></td>
-															<td><?php lsGetCheckbox($lsDefaults['layers']['transitionInFade'], $sublayer, array('class' => 'sublayerprop')) ?></td>
-															<td class="right"><?php echo $lsDefaults['layers']['transitionInRotate']['name'] ?></td>
-															<td><?php lsGetInput($lsDefaults['layers']['transitionInRotate'], $sublayer, array('class' => 'sublayerprop')) ?> &deg;</td>
-															<td class="right"><?php echo $lsDefaults['layers']['transitionInRotateX']['name'] ?></td>
-															<td><?php lsGetInput($lsDefaults['layers']['transitionInRotateX'], $sublayer, array('class' => 'sublayerprop')) ?> &deg;</td>
-															<td class="right"><?php echo $lsDefaults['layers']['transitionInRotateY']['name'] ?></td>
-															<td><?php lsGetInput($lsDefaults['layers']['transitionInRotateY'], $sublayer, array('class' => 'sublayerprop')) ?> &deg;</td>
-															<td colspan="2" rowspan="2" class="center">
-																<?php echo $lsDefaults['layers']['transitionInTransformOrigin']['name'] ?><br>
-																<?php lsGetInput($lsDefaults['layers']['transitionInTransformOrigin'], $sublayer, array('class' => 'sublayerprop')) ?>
-															</td>
-														</tr>
-
-														<tr>
-															<td class="right"><?php echo $lsDefaults['layers']['transitionInSkewX']['name'] ?></td>
-															<td><?php lsGetInput($lsDefaults['layers']['transitionInSkewX'], $sublayer, array('class' => 'sublayerprop')) ?> &deg;</td>
-															<td class="right"><?php echo $lsDefaults['layers']['transitionInSkewY']['name'] ?></td>
-															<td><?php lsGetInput($lsDefaults['layers']['transitionInSkewY'], $sublayer, array('class' => 'sublayerprop')) ?> &deg;</td>
-															<td class="right"><?php echo $lsDefaults['layers']['transitionInScaleX']['name'] ?></td>
-															<td><?php lsGetInput($lsDefaults['layers']['transitionInScaleX'], $sublayer, array('class' => 'sublayerprop')) ?></td>
-															<td class="right"><?php echo $lsDefaults['layers']['transitionInScaleY']['name'] ?></td>
-															<td><?php lsGetInput($lsDefaults['layers']['transitionInScaleY'], $sublayer, array('class' => 'sublayerprop')) ?></td>
-														</tr>
-														<tr class="ls-separator"><td colspan="11"></td></tr>
-														<tr>
-															<td rowspan="3"><?php _e('Transition out', 'LayerSlider') ?></td>
-															<td class="right"><?php echo $lsDefaults['layers']['transitionOutOffsetX']['name'] ?></td>
-															<td><?php lsGetInput($lsDefaults['layers']['transitionOutOffsetX'], $sublayer, array('class' => 'sublayerprop')) ?></td>
-															<td class="right"><?php echo $lsDefaults['layers']['transitionOutOffsetY']['name'] ?></td>
-															<td><?php lsGetInput($lsDefaults['layers']['transitionOutOffsetY'], $sublayer, array('class' => 'sublayerprop')) ?></td>
-															<td class="right"><?php echo $lsDefaults['layers']['transitionOutDuration']['name'] ?></td>
-															<td><?php lsGetInput($lsDefaults['layers']['transitionOutDuration'], $sublayer, array('class' => 'sublayerprop')) ?> ms</td>
-															<td class="right"><?php echo $lsDefaults['layers']['showUntil']['name'] ?></td>
-															<td><?php lsGetInput($lsDefaults['layers']['showUntil'], $sublayer, array('class' => 'sublayerprop')) ?> ms</td>
-															<td class="right"><a href="http://easings.net/" target="_blank"><?php echo $lsDefaults['layers']['transitionOutEasing']['name'] ?></a></td>
-															<td><?php lsGetSelect($lsDefaults['layers']['transitionOutEasing'], $sublayer, array('class' => 'sublayerprop', 'options' => $lsDefaults['easings'])) ?></td>
-														</tr>
-														<tr>
-															<td class="right"><?php echo $lsDefaults['layers']['transitionOutFade']['name'] ?></td>
-															<td><?php lsGetCheckbox($lsDefaults['layers']['transitionOutFade'], $sublayer, array('class' => 'sublayerprop')) ?></td>
-															<td class="right"><?php echo $lsDefaults['layers']['transitionOutRotate']['name'] ?></td>
-															<td><?php lsGetInput($lsDefaults['layers']['transitionOutRotate'], $sublayer, array('class' => 'sublayerprop')) ?> &deg;</td>
-															<td class="right"><?php echo $lsDefaults['layers']['transitionOutRotateX']['name'] ?></td>
-															<td><?php lsGetInput($lsDefaults['layers']['transitionOutRotateX'], $sublayer, array('class' => 'sublayerprop')) ?> &deg;</td>
-															<td class="right"><?php echo $lsDefaults['layers']['transitionOutRotateY']['name'] ?></td>
-															<td><?php lsGetInput($lsDefaults['layers']['transitionOutRotateY'], $sublayer, array('class' => 'sublayerprop')) ?> &deg;</td>
-															<td colspan="2" rowspan="2" class="center">
-																<?php echo $lsDefaults['layers']['transitionOutTransformOrigin']['name'] ?><br>
-																<?php lsGetInput($lsDefaults['layers']['transitionOutTransformOrigin'], $sublayer, array('class' => 'sublayerprop')) ?>
-															</td>
-														</tr>
-
-														<tr>
-															<td class="right"><?php echo $lsDefaults['layers']['transitionOutSkewX']['name'] ?></td>
-															<td><?php lsGetInput($lsDefaults['layers']['transitionOutSkewX'], $sublayer, array('class' => 'sublayerprop')) ?> &deg;</td>
-															<td class="right"><?php echo $lsDefaults['layers']['transitionOutSkewY']['name'] ?></td>
-															<td><?php lsGetInput($lsDefaults['layers']['transitionOutSkewY'], $sublayer, array('class' => 'sublayerprop')) ?> &deg;</td>
-															<td class="right"><?php echo $lsDefaults['layers']['transitionOutScaleX']['name'] ?></td>
-															<td><?php lsGetInput($lsDefaults['layers']['transitionOutScaleX'], $sublayer, array('class' => 'sublayerprop')) ?></td>
-															<td class="right"><?php echo $lsDefaults['layers']['transitionOutScaleY']['name'] ?></td>
-															<td><?php lsGetInput($lsDefaults['layers']['transitionOutScaleY'], $sublayer, array('class' => 'sublayerprop')) ?></td>
-														</tr>
-														<tr class="ls-separator"><td colspan="11"></td></tr>
-														<tr>
-															<td rowspan="3"><?php _e('Other options', 'LayerSlider') ?></td>
-															<td class="right"><?php echo $lsDefaults['layers']['transitionParallaxLevel']['name'] ?></td>
-															<td><?php lsGetInput($lsDefaults['layers']['transitionParallaxLevel'], $sublayer, array('class' => 'sublayerprop')) ?> ms</td>
-															<td class="right"><?php _e('Hidden', 'LayerSlider') ?></td>
-															<td><input type="checkbox" name="skip" class="checkbox" data-help="<?php _e("If you don't want to use this layer, but you want to keep it, you can hide it with this switch.", "LayerSlider") ?>" <?php echo isset($sublayer['skip']) ? 'checked="checked"' : '' ?>></td>
-															<td colspan="6"><button class="button duplicate" data-help="<?php _e('If you will use similar settings for other layers or you want to experiment on a copy, you can duplicate this layer.', 'LayerSlider') ?>"><?php _e('Duplicate this layer', 'LayerSlider') ?></button></td>
-														</tr>
-												</table>
-											</div>
-											<div class="ls-sublayer-page ls-sublayer-link">
-												<table>
-													<tbody>
-														<tr>
-															<td><?php echo $lsDefaults['layers']['linkURL']['name'] ?></td>
-															<td class="url"><?php lsGetInput($lsDefaults['layers']['linkURL'], $sublayer) ?></td>
-															<td><?php lsGetSelect($lsDefaults['layers']['linkTarget'], $sublayer) ?></td>
-														</tr>
-													</tbody>
-												</table>
-											</div>
-											<div class="ls-sublayer-page ls-sublayer-style">
-												<?php $sublayer['styles'] = !empty($sublayer['styles']) ? json_decode(stripslashes($sublayer['styles']), true) : array(); ?>
-												<input type="hidden" name="styles">
-												<table>
-													<tbody>
-														<tr>
-															<td><?php _e('Layout & Positions', 'LayerSlider') ?></td>
-															<td class="right"><?php echo $lsDefaults['layers']['width']['name'] ?></td>
-															<td><?php lsGetInput($lsDefaults['layers']['width'], $sublayer['styles'], array('class' => 'auto')) ?></td>
-															<td class="right"><?php echo $lsDefaults['layers']['height']['name'] ?></td>
-															<td><?php lsGetInput($lsDefaults['layers']['height'], $sublayer['styles'], array('class' => 'auto')) ?></td>
-															<td class="right"><?php echo $lsDefaults['layers']['top']['name'] ?></td>
-															<td><?php lsGetInput($lsDefaults['layers']['top'], $sublayer) ?></td>
-															<td class="right"><?php echo $lsDefaults['layers']['left']['name'] ?></td>
-															<td><?php lsGetInput($lsDefaults['layers']['left'], $sublayer) ?></td>
-														</tr>
-														<tr>
-															<td><?php _e('Padding', 'LayerSlider') ?></td>
-															<td class="right"><?php echo $lsDefaults['layers']['paddingTop']['name'] ?></td>
-															<td><?php lsGetInput($lsDefaults['layers']['paddingTop'], $sublayer['styles'], array('class' => 'auto')) ?></td>
-															<td class="right"><?php echo $lsDefaults['layers']['paddingRight']['name'] ?></td>
-															<td><?php lsGetInput($lsDefaults['layers']['paddingRight'], $sublayer['styles'], array('class' => 'auto')) ?></td>
-															<td class="right"><?php echo $lsDefaults['layers']['paddingBottom']['name'] ?></td>
-															<td><?php lsGetInput($lsDefaults['layers']['paddingBottom'], $sublayer['styles'], array('class' => 'auto')) ?></td>
-															<td class="right"><?php echo $lsDefaults['layers']['paddingLeft']['name'] ?></td>
-															<td><?php lsGetInput($lsDefaults['layers']['paddingLeft'], $sublayer['styles'], array('class' => 'auto')) ?></td>
-														</tr>
-														<tr>
-															<td><?php _e('Border', 'LayerSlider') ?></td>
-															<td class="right"><?php echo $lsDefaults['layers']['borderTop']['name'] ?></td>
-															<td><?php lsGetInput($lsDefaults['layers']['borderTop'], $sublayer['styles'], array('class' => 'auto')) ?></td>
-															<td class="right"><?php echo $lsDefaults['layers']['borderRight']['name'] ?></td>
-															<td><?php lsGetInput($lsDefaults['layers']['borderRight'], $sublayer['styles'], array('class' => 'auto')) ?></td>
-															<td class="right"><?php echo $lsDefaults['layers']['borderBottom']['name'] ?></td>
-															<td><?php lsGetInput($lsDefaults['layers']['borderBottom'], $sublayer['styles'], array('class' => 'auto')) ?></td>
-															<td class="right"><?php echo $lsDefaults['layers']['borderLeft']['name'] ?></td>
-															<td><?php lsGetInput($lsDefaults['layers']['borderLeft'], $sublayer['styles'], array('class' => 'auto')) ?></td>
-														</tr>
-														<tr>
-															<td><?php _e('Font', 'LayerSlider') ?></td>
-															<td class="right"><?php echo $lsDefaults['layers']['fontFamily']['name'] ?></td>
-															<td><?php lsGetInput($lsDefaults['layers']['fontFamily'], $sublayer['styles'], array('class' => 'auto')) ?></td>
-															<td class="right"><?php echo $lsDefaults['layers']['fontSize']['name'] ?></td>
-															<td><?php lsGetInput($lsDefaults['layers']['fontSize'], $sublayer['styles'], array('class' => 'auto')) ?></td>
-															<td class="right"><?php echo $lsDefaults['layers']['lineHeight']['name'] ?></td>
-															<td><?php lsGetInput($lsDefaults['layers']['lineHeight'], $sublayer['styles'], array('class' => 'auto')) ?></td>
-															<td class="right"><?php echo $lsDefaults['layers']['color']['name'] ?></td>
-															<td><?php lsGetInput($lsDefaults['layers']['color'], $sublayer['styles'], array('class' => 'auto ls-colorpicker')) ?></td>
-														</tr>
-														<tr>
-															<td><?php _e('Misc', 'LayerSlider') ?></td>
-															<td class="right"><?php echo $lsDefaults['layers']['background']['name'] ?></td>
-															<td><?php lsGetInput($lsDefaults['layers']['background'], $sublayer['styles'], array('class' => 'auto ls-colorpicker')) ?></td>
-															<td class="right"><?php echo $lsDefaults['layers']['borderRadius']['name'] ?></td>
-															<td><?php lsGetInput($lsDefaults['layers']['borderRadius'], $sublayer['styles'], array('class' => 'auto')) ?></td>
-															<td class="right"><?php _e('Word-wrap', 'LayerSlider') ?></td>
-															<td colspan="3"><input type="checkbox" name="wordwrap" data-help="<?php _e('If you use custom sized layers, you have to enable this setting to wrap your text.', 'LayerSlider') ?>" class="checkbox"<?php echo isset($sublayer['wordwrap']) ? ' checked="checked"' : '' ?>></td>
-														</tr>
-														<tr>
-															<td><?php _e('Custom style settings', 'LayerSlider') ?></td>
-															<td class="right"><?php _e('Custom styles', 'LayerSlider') ?></td>
-															<td colspan="7"><textarea rows="5" cols="50" name="style" class="style" data-help="<?php _e('If you want to set style settings other then above, you can use here any CSS codes. Please make sure to write valid markup.', 'LayerSlider') ?>"><?php echo !empty($sublayer['style']) ? stripslashes($sublayer['style']) : '' ?></textarea></td>
-														</tr>
-													</tbody>
-												</table>
-											</div>
-											<div class="ls-sublayer-page ls-sublayer-attributes">
-												<table>
-													<tbody>
-														<tr>
-															<td><?php _e('Attributes', 'LayerSlider') ?></td>
-															<td class="right"><?php echo $lsDefaults['layers']['ID']['name'] ?></td>
-															<td><?php lsGetInput($lsDefaults['layers']['ID'], $sublayer) ?></td>
-															<td class="right"><?php echo $lsDefaults['layers']['class']['name'] ?></td>
-															<td><?php lsGetInput($lsDefaults['layers']['class'], $sublayer) ?></td>
-															<td class="right"><?php echo $lsDefaults['layers']['title']['name'] ?></td>
-															<td><?php lsGetInput($lsDefaults['layers']['title'], $sublayer) ?></td>
-															<td class="right"><?php echo $lsDefaults['layers']['alt']['name'] ?></td>
-															<td><?php lsGetInput($lsDefaults['layers']['alt'], $sublayer) ?></td>
-															<td class="right"><?php echo $lsDefaults['layers']['rel']['name'] ?></td>
-															<td><?php lsGetInput($lsDefaults['layers']['rel'], $sublayer) ?></td>
-														</tr>
-													</tbody>
-												</table>
-											</div>
-										</div>
-									</div>
-								</td>
-							</tr>
-							<?php endforeach; ?>
-							<?php endif; ?>
-						</tbody>
-					</table>
-					<a href="#" class="ls-add-sublayer"><?php _e('Add new layer', 'LayerSlider') ?></a>
-				</div>
-				<?php endforeach; ?>
-			<?php endif; ?>
+			<div id="ls-layers" class="clearfix">
+				<?php include LS_ROOT_PATH . '/templates/tmpl-slide.php'; ?>
 			</div>
 		</div>
 
 		<!-- Event Callbacks -->
 		<div class="ls-page ls-callback-page">
+
+			<div class="ls-notification-info">
+				<i class="dashicons dashicons-info"> </i>
+				<?php _e('Please read our <a href="https://support.kreaturamedia.com/docs/layersliderwp/documentation.html#layerslider-api" target="_blank">online documentation</a> before start using the API. LayerSlider 6 introduced an entirely new API model with different events and methods.', 'LayerSlider') ?>
+			</div>
+
+
+			<div class="ls-callback-separator">Init Events</div>
+
+			<div class="ls-box ls-callback-box">
+				<h3 class="header">
+					sliderWillLoad
+					<figure><span>|</span> <?php _e('Fires before parsing user settings and rendering the UI.', 'LayerSlider') ?></figure>
+				</h3>
+				<div>
+					<textarea name="sliderWillLoad" cols="20" rows="5" class="ls-codemirror">function( event, slider ) {
+
+}</textarea>
+				</div>
+			</div>
+
+			<div class="ls-box ls-callback-box">
+				<h3 class="header">
+					sliderDidLoad
+					<figure><span>|</span> <?php _e('Fires when the slider is fully initialized and its DOM nodes become accessible.', 'LayerSlider') ?></figure>
+				</h3>
+				<div>
+					<textarea name="sliderDidLoad" cols="20" rows="5" class="ls-codemirror">function( event, slider ) {
+
+}</textarea>
+				</div>
+			</div>
+
+			<div class="ls-callback-separator">Resize Events</div>
+
+
+			<div class="ls-box ls-callback-box side">
+				<h3 class="header">
+					sliderWillResize
+					<figure><span>|</span> <?php _e('Fires before the slider renders resize events.', 'LayerSlider') ?></figure>
+				</h3>
+				<div>
+					<textarea name="sliderWillResize" cols="20" rows="5" class="ls-codemirror">function( event, slider ) {
+
+}</textarea>
+				</div>
+			</div>
+
+			<div class="ls-box ls-callback-box">
+				<h3 class="header">
+					sliderDidResize
+					<figure><span>|</span> <?php _e('Fires after the slider has rendered resize events.', 'LayerSlider') ?></figure>
+				</h3>
+				<div>
+					<textarea name="sliderDidResize" cols="20" rows="5" class="ls-codemirror">function( event, slider ) {
+
+}</textarea>
+				</div>
+			</div>
+
+			<div class="ls-callback-separator">Slideshow Events</div>
+
+
+			<div class="ls-box ls-callback-box">
+				<h3 class="header">
+					slideshowStateDidChange
+					<figure><span>|</span> <?php _e('Fires upon every slideshow state change, which may not influence the playing status.', 'LayerSlider') ?></figure>
+				</h3>
+				<div>
+					<textarea name="slideshowStateDidChange" cols="20" rows="5" class="ls-codemirror">function( event, slider ) {
+
+}</textarea>
+				</div>
+			</div>
+
+			<div class="ls-box ls-callback-box">
+				<h3 class="header">
+					slideshowDidPause
+					<figure><span>|</span> <?php _e('Fires when the slideshow pauses from playing status.', 'LayerSlider') ?></figure>
+				</h3>
+				<div>
+					<textarea name="slideshowDidPause" cols="20" rows="5" class="ls-codemirror">function( event, slider ) {
+
+}</textarea>
+				</div>
+			</div>
+
+			<div class="ls-box ls-callback-box side">
+				<h3 class="header">
+					slideshowDidResume
+					<figure><span>|</span> <?php _e('Fires when the slideshow resumes from paused status.', 'LayerSlider') ?></figure>
+				</h3>
+				<div>
+					<textarea name="slideshowDidResume" cols="20" rows="5" class="ls-codemirror">function( event, slider ) {
+
+}</textarea>
+				</div>
+			</div>
+
+
+			<div class="ls-callback-separator">Slide Change Event</div>
+
+
+			<div class="ls-box ls-callback-box">
+				<h3 class="header">
+					slideChangeWillStart
+					<figure><span>|</span> <?php _e('Signals when the slider wants to change slides, and is your last chance to divert it or intervene in any way.', 'LayerSlider') ?></figure>
+				</h3>
+				<div>
+					<textarea name="slideChangeWillStart" cols="20" rows="5" class="ls-codemirror">function( event, slider ) {
+
+}</textarea>
+				</div>
+			</div>
+
+			<div class="ls-box ls-callback-box">
+				<h3 class="header">
+					slideChangeDidStart
+					<figure><span>|</span> <?php _e('Fires when the slider has started a slide change.', 'LayerSlider') ?></figure>
+				</h3>
+				<div>
+					<textarea name="slideChangeDidStart" cols="20" rows="5" class="ls-codemirror">function( event, slider ) {
+
+}</textarea>
+				</div>
+			</div>
+
+			<div class="ls-box ls-callback-box">
+				<h3 class="header">
+					slideChangeWillComplete
+					<figure><span>|</span> <?php _e('Fires before completing a slide change.', 'LayerSlider') ?></figure>
+				</h3>
+				<div>
+					<textarea name="slideChangeWillComplete" cols="20" rows="5" class="ls-codemirror">function( event, slider ) {
+
+}</textarea>
+				</div>
+			</div>
+
+			<div class="ls-box ls-callback-box">
+				<h3 class="header">
+					slideChangeDidComplete
+					<figure><span>|</span> <?php _e('Fires after a slide change has completed and the slide indexes have been updated. ', 'LayerSlider') ?></figure>
+				</h3>
+				<div>
+					<textarea name="slideChangeDidComplete" cols="20" rows="5" class="ls-codemirror">function( event, slider ) {
+
+}</textarea>
+				</div>
+			</div>
+
+
+			<div class="ls-callback-separator">Slide Timeline Events</div>
+
+			<div class="ls-box ls-callback-box">
+				<h3 class="header">
+					slideTimelineDidCreate
+					<figure><span>|</span> <?php _e("Fires when the current slide's animation timeline (e.g. your layers) becomes accessible for interfacing.", 'LayerSlider') ?></figure>
+				</h3>
+				<div>
+					<textarea name="slideTimelineDidCreate" cols="20" rows="5" class="ls-codemirror">function( event, slider ) {
+
+}</textarea>
+				</div>
+			</div>
+
+
+			<div class="ls-box ls-callback-box">
+				<h3 class="header">
+					slideTimelineDidUpdate
+					<figure><span>|</span> <?php _e("Fires rapidly (at each frame) throughout the entire slide while playing, including reverse playback.", 'LayerSlider') ?></figure>
+				</h3>
+				<div>
+					<textarea name="slideTimelineDidUpdate" cols="20" rows="5" class="ls-codemirror">function( event, timeline ) {
+
+}</textarea>
+				</div>
+			</div>
+
+
+			<div class="ls-box ls-callback-box">
+				<h3 class="header">
+					slideTimelineDidStart
+					<figure><span>|</span> <?php _e("Fires when the current slide's animation timeline (e.g. your layers) has started playing.", 'LayerSlider') ?></figure>
+				</h3>
+				<div>
+					<textarea name="slideTimelineDidStart" cols="20" rows="5" class="ls-codemirror">function( event, slider ) {
+
+}</textarea>
+				</div>
+			</div>
+
+			<div class="ls-box ls-callback-box">
+				<h3 class="header">
+					slideTimelineDidComplete
+					<figure><span>|</span> <?php _e("Fires when the current slide's animation timeline (e.g. layer transitions) has completed.", 'LayerSlider') ?></figure>
+				</h3>
+				<div>
+					<textarea name="slideTimelineDidComplete" cols="20" rows="5" class="ls-codemirror">function( event, slider ) {
+
+}</textarea>
+				</div>
+			</div>
+
+			<div class="ls-box ls-callback-box">
+				<h3 class="header">
+					slideTimelineDidReverseComplete
+					<figure><span>|</span> <?php _e('Fires when all reversed animations have reached the beginning of the current slide.', 'LayerSlider') ?></figure>
+				</h3>
+				<div>
+					<textarea name="slideTimelineDidReverseComplete" cols="20" rows="5" class="ls-codemirror">function( event, slider ) {
+
+}</textarea>
+				</div>
+			</div>
+
+
+			<div class="ls-callback-separator">Destroy Events</div>
+
+
+			<div class="ls-box ls-callback-box">
+				<h3 class="header">
+					sliderDidDestroy
+					<figure><span>|</span> <?php _e('Fires when the slider destructor has finished and it is safe to remove the slider from the DOM.', 'LayerSlider') ?></figure>
+				</h3>
+				<div>
+					<textarea name="sliderDidDestroy" data-event-data="false" cols="20" rows="5" class="ls-codemirror">function( event ) {
+
+}</textarea>
+				</div>
+			</div>
+
+			<div class="ls-box ls-callback-box">
+				<h3 class="header">
+					sliderDidRemove
+					<figure><span>|</span> <?php _e('Fires when the slider has been removed from the DOM when using the <i>destroy</i> API method.', 'LayerSlider') ?></figure>
+				</h3>
+				<div>
+					<textarea name="sliderDidRemove" data-event-data="false" cols="20" rows="5" class="ls-codemirror">function( event ) {
+
+}</textarea>
+				</div>
+			</div>
+
+
+			<div class="ls-callback-separator">Old API Events</div>
+			<div class="ls-notification-info">
+				<i class="dashicons dashicons-info"> </i>
+				<?php _e('The events below were used in version 5 and earlier. These events are no longer in use, they cannot be edited. They are shown only to offer you a way of viewing and porting them to the new API.', 'LayerSlider') ?>
+			</div>
+
 			<div class="ls-box ls-callback-box">
 				<h3 class="header">
 					cbInit
-					<figure><span>|</span> <?php _e('Fires when LayerSlider has loaded', 'LayerSlider') ?></figure>
+					<figure><span>|</span> <?php _e('Fires when LayerSlider has loaded.', 'LayerSlider') ?></figure>
 				</h3>
 				<div>
-					<textarea name="cbinit" cols="20" rows="5" class="ls-codemirror"><?php echo !empty($slider['properties']['cbinit']) ? stripslashes($slider['properties']['cbinit']) : $lsDefaults['slider']['cbInit']['value'] ?></textarea>
+					<textarea readonly name="cbinit" cols="20" rows="5" class="ls-codemirror"><?php echo $slider['properties']['cbinit'] ?></textarea>
 				</div>
 			</div>
 
@@ -647,7 +656,7 @@
 					<figure><span>|</span> <?php _e('Calling when the slideshow has started.', 'LayerSlider') ?></figure>
 				</h3>
 				<div>
-					<textarea name="cbstart" cols="20" rows="5" class="ls-codemirror"><?php echo !empty($slider['properties']['cbstart']) ? stripslashes($slider['properties']['cbstart']) : $lsDefaults['slider']['cbStart']['value'] ?></textarea>
+					<textarea readonly name="cbstart" cols="20" rows="5" class="ls-codemirror"><?php echo $slider['properties']['cbstart'] ?></textarea>
 				</div>
 			</div>
 
@@ -657,17 +666,17 @@
 					<figure><span>|</span> <?php _e('Calling when the slideshow is stopped by the user.', 'LayerSlider') ?></figure>
 				</h3>
 				<div>
-					<textarea name="cbstop" cols="20" rows="5" class="ls-codemirror"><?php echo !empty($slider['properties']['cbstop']) ? stripslashes($slider['properties']['cbstop']) : $lsDefaults['slider']['cbStop']['value'] ?></textarea>
+					<textarea readonly name="cbstop" cols="20" rows="5" class="ls-codemirror"><?php echo $slider['properties']['cbstop'] ?></textarea>
 				</div>
 			</div>
 
 			<div class="ls-box ls-callback-box">
 				<h3 class="header">
 					cbPause
-					<figure><span>|</span> <?php _e('Fireing when the slideshow is temporary on hold (e.g.: "Pause on hover" feaure).', 'LayerSlider') ?></figure>
+					<figure><span>|</span> <?php _e('Fireing when the slideshow is temporary on hold (e.g.: "Pause on hover" feature).', 'LayerSlider') ?></figure>
 				</h3>
 				<div>
-					<textarea name="cbpause" cols="20" rows="5" class="ls-codemirror"><?php echo !empty($slider['properties']['cbpause']) ? stripslashes($slider['properties']['cbpause']) : $lsDefaults['slider']['cbPause']['value'] ?></textarea>
+					<textarea readonly name="cbpause" cols="20" rows="5" class="ls-codemirror"><?php echo $slider['properties']['cbpause'] ?></textarea>
 				</div>
 			</div>
 
@@ -677,7 +686,7 @@
 					<figure><span>|</span> <?php _e('Calling when the slider commencing slide change (animation start).', 'LayerSlider') ?></figure>
 				</h3>
 				<div>
-					<textarea name="cbanimstart" cols="20" rows="5" class="ls-codemirror"><?php echo !empty($slider['properties']['cbanimstart']) ? stripslashes($slider['properties']['cbanimstart']) : $lsDefaults['slider']['cbAnimStart']['value'] ?></textarea>
+					<textarea readonly name="cbanimstart" cols="20" rows="5" class="ls-codemirror"><?php echo $slider['properties']['cbanimstart'] ?></textarea>
 				</div>
 			</div>
 
@@ -687,7 +696,7 @@
 					<figure><span>|</span> <?php _e('Fireing when the slider finished a slide change (animation end).', 'LayerSlider') ?></figure>
 				</h3>
 				<div>
-					<textarea name="cbanimstop" cols="20" rows="5" class="ls-codemirror"><?php echo !empty($slider['properties']['cbanimstop']) ? stripslashes($slider['properties']['cbanimstop']) : $lsDefaults['slider']['cbAnimStop']['value'] ?></textarea>
+					<textarea readonly name="cbanimstop" cols="20" rows="5" class="ls-codemirror"><?php echo $slider['properties']['cbanimstop'] ?></textarea>
 				</div>
 			</div>
 
@@ -697,7 +706,7 @@
 					<figure><span>|</span> <?php _e('Calling when the slider will change to the previous slide by the user.', 'LayerSlider') ?></figure>
 				</h3>
 				<div>
-					<textarea name="cbprev" cols="20" rows="5" class="ls-codemirror"><?php echo !empty($slider['properties']['cbprev']) ? stripslashes($slider['properties']['cbprev']) : $lsDefaults['slider']['cbPrev']['value'] ?></textarea>
+					<textarea readonly name="cbprev" cols="20" rows="5" class="ls-codemirror"><?php echo $slider['properties']['cbprev'] ?></textarea>
 				</div>
 			</div>
 
@@ -707,39 +716,18 @@
 					<figure><span>|</span> <?php _e('Calling when the slider will change to the next slide by the user.', 'LayerSlider') ?></figure>
 				</h3>
 				<div>
-					<textarea name="cbnext" cols="20" rows="5" class="ls-codemirror"><?php echo !empty($slider['properties']['cbnext']) ? stripslashes($slider['properties']['cbnext']) : $lsDefaults['slider']['cbNext']['value'] ?></textarea>
+					<textarea readonly name="cbnext" cols="20" rows="5" class="ls-codemirror"><?php echo $slider['properties']['cbnext'] ?></textarea>
 				</div>
 			</div>
-			<div class="clear"></div>
+
 		</div>
 	</div>
 
-	<div class="ls-box ls-publish">
-		<h3 class="header"><?php _e('Publish', 'LayerSlider') ?></h3>
-		<div class="inner">
-			<button class="button-primary"><?php _e('Save changes', 'LayerSlider') ?></button>
-			<p class="ls-saving-warning"></p>
-			<div class="clear"></div>
+	<div class="ls-publish">
+		<button type="submit" class="button button-primary button-hero"><?php _e('Save changes', 'LayerSlider') ?></button>
+		<div class="ls-save-shortcode">
+			<p><span><?php _e('Use shortcode:', 'LayerSlider') ?></span><br><span>[layerslider id="<?php echo !empty($slider['properties']['slug']) ? $slider['properties']['slug'] : $id ?>"]</span></p>
+			<p><span><?php _e('Use PHP function:', 'LayerSlider') ?></span><br><span>&lt;?php layerslider(<?php echo !empty($slider['properties']['slug']) ? "'{$slider['properties']['slug']}'" : $id ?>) ?&gt;</span></p>
 		</div>
 	</div>
 </form>
-
-
-<script type="text/javascript">
-
-	// Plugin path
-	var pluginPath = '<?php echo LS_ROOT_URL ?>/static/';
-
-	// Transition images
-	var lsTrImgPath = '<?php echo LS_ROOT_URL ?>/static/img/';
-
-	// New Media Library
-	<?php if(function_exists( 'wp_enqueue_media' )) { ?>
-	var newMediaUploader = true;
-	<?php } else { ?>
-	var newMediaUploader = false;
-	<?php } ?>
-
-	// Screen options
-	var lsScreenOptions = <?php echo json_encode($lsScreenOptions) ?>;
-</script>

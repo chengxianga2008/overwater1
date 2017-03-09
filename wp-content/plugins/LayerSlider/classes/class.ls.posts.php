@@ -11,20 +11,18 @@ class LS_Posts {
 	 * @param  array  	$args Array of WP_Query attributes
 	 * @return bool           Success of the query
 	 */
-	public function find($args = array()) {
+	public static function find($args = array()) {
 
-		if($this->posts = get_posts($args)) {
-			$this->post = $this->posts[0];
+		// Crate new instance
+		$instance = new self;
+
+		if($instance->posts = get_posts($args)) {
+			$instance->post = $instance->posts[0];
 		}
-		return $this;
+		return $instance;
 	}
 
-
-	public function getResults() {
-		return $this->posts;
-	}
-
-	public function getPostTypes() {
+	public static function getPostTypes() {
 
 		// Get post types
 		$postTypes = get_post_types();
@@ -35,10 +33,12 @@ class LS_Posts {
 
 		// Convert names to plural
 		foreach($postTypes as $key => $item) {
-			$postTypes[$key] = array();
-			$postTypes[$key]['slug'] = $item;
-			$postTypes[$key]['obj'] = get_post_type_object($item);
-			$postTypes[$key]['name'] = $postTypes[$key]['obj']->labels->name;
+			if(!empty($item)) {
+				$postTypes[$key] = array();
+				$postTypes[$key]['slug'] = $item;
+				$postTypes[$key]['obj'] = get_post_type_object($item);
+				$postTypes[$key]['name'] = $postTypes[$key]['obj']->labels->name;
+			}
 		}
 
 		return $postTypes;
@@ -52,19 +52,21 @@ class LS_Posts {
 		}
 
 		foreach($this->posts as $key => $val) {
+			$this->post = $val;
 			$ret[$key]['post-id'] = $val->ID;
 			$ret[$key]['post-slug'] = $val->post_name;
 			$ret[$key]['post-url'] = get_permalink($val->ID);
 			$ret[$key]['date-published'] = date(get_option('date_format'), strtotime($val->post_date));
 			$ret[$key]['date-modified'] = date(get_option('date_format'), strtotime($val->post_modified));
-			$ret[$key]['thumbnail'] = wp_get_attachment_url(get_post_thumbnail_id($val->ID));
-			$ret[$key]['thumbnail'] = !empty($ret[$key]['thumbnail']) ? $ret[$key]['thumbnail'] : LS_ROOT_URL . '/static/img/blank.gif';
+			$ret[$key]['thumbnail'] = $this->getPostThumb($val->ID);
+			$ret[$key]['thumbnail'] = !empty($ret[$key]['thumbnail']) ? $ret[$key]['thumbnail'] : LS_ROOT_URL . '/static/admin/img/blank.gif';
 			$ret[$key]['image'] = '<img src="'.$ret[$key]['thumbnail'].'" alt="">';
 			$ret[$key]['image-url'] = $ret[$key]['thumbnail'];
-			$ret[$key]['title'] = $val->post_title;
-			$ret[$key]['content'] = wp_strip_all_tags($val->post_content);
-			$ret[$key]['excerpt'] = !empty($val->post_excerpt) ? $val->post_excerpt : '';
+			$ret[$key]['title'] = htmlspecialchars($this->getTitle(), ENT_COMPAT | ENT_HTML401 | ENT_SUBSTITUTE);
+			$ret[$key]['content'] = $this->getContent();
+			$ret[$key]['excerpt'] = $this->getExcerpt();
 			$ret[$key]['author'] = get_userdata($val->post_author)->user_nicename;
+			$ret[$key]['author-name'] = get_userdata($val->post_author)->display_name;
 			$ret[$key]['author-id'] = $val->post_author;
 			$ret[$key]['categories'] = $this->getCategoryList($val);
 			$ret[$key]['tags'] = $this->getTagList($val);
@@ -105,7 +107,7 @@ class LS_Posts {
 		// Featured image
 		if(stripos($str, '[image]') !== false) {
 			if(has_post_thumbnail($this->post->ID)) {
-				$src = wp_get_attachment_url(get_post_thumbnail_id($this->post->ID));
+				$src = $this->getPostThumb($this->post->ID);
 				if(!empty($src)){
 					$str = str_replace('[image]', '<img src="'.$src.'" />', $str);
 				}
@@ -115,7 +117,7 @@ class LS_Posts {
 		// Featured image URL
 		if(stripos($str, '[image-url]') !== false) {
 			if(has_post_thumbnail($this->post->ID)) {
-				$src = wp_get_attachment_url(get_post_thumbnail_id($this->post->ID));
+				$src = $this->getPostThumb($this->post->ID);
 				if(!empty($src)){
 					$str = str_replace('[image-url]', $src, $str);
 				}
@@ -124,11 +126,7 @@ class LS_Posts {
 
 		// Title
 		if(stripos($str, '[title]') !== false) {
-			if(!empty($textlength)) {
-				$str = str_replace('[title]', substr($this->getTitle(), 0, $textlength), $str);
-			} else {
-				$str = str_replace('[title]', $this->getTitle(), $str);
-			}
+			$str = str_replace('[title]', $this->getTitle($textlength), $str);
 		}
 
 		// Content
@@ -137,17 +135,16 @@ class LS_Posts {
 
 		// Excerpt
 		if(stripos($str, '[excerpt]') !== false) {
-			if(empty($this->post->post_excerpt)) { return ''; }
-			if(!empty($textlength)) {
-				$str = str_replace('[excerpt]', substr($this->post->post_excerpt, 0, $textlength), $str);
-			} else {
-				$str = str_replace('[excerpt]', $this->post->post_excerpt, $str);
-			}
+			$str = str_replace('[excerpt]', $this->getExcerpt($textlength), $str);
 		}
 
-		// Author
+		// Author nickname
 		if(stripos($str, '[author]') !== false) {
-			$str = str_replace('[author]', $this->getAuthor(), $str); }
+			$str = str_replace('[author]', $this->getAuthor(true), $str); }
+
+		// Author display name
+		if(stripos($str, '[author-name]') !== false) {
+			$str = str_replace('[author-name]', $this->getAuthor(false), $str); }
 
 		// Author ID
 		if(stripos($str, '[author-id]') !== false) {
@@ -167,6 +164,19 @@ class LS_Posts {
 		if(stripos($str, '[comments]') !== false) {
 			$str = str_replace('[comments]', $this->post->comment_count, $str); }
 
+		// Meta
+		if(stripos($str, '[meta:') !== false) {
+			$matches = array();
+			preg_match_all('/\[meta:\w(?:[-\w]*\w)?]/', $str, $matches);
+
+			foreach($matches[0] as $match) {
+				$meta = str_replace('[meta:', '', $match);
+				$meta = str_replace(']', '', $meta);
+				$meta = get_post_meta($this->post->ID, $meta, true);
+				$str = str_replace($match, $meta, $str);
+			}
+		}
+
 		return $str;
 	}
 
@@ -175,15 +185,46 @@ class LS_Posts {
 	 * Returns the lastly selected post's title
 	 * @return string The title of the post
 	 */
-	public function getTitle() {
-		if(is_object($this->post)) { return $this->post->post_title; }
+	public function getTitle($length = 0) {
+
+		if(!is_object($this->post)) { return false; }
+
+		$title = __($this->post->post_title);
+		if(!empty($length)) {
+			$title = substr($title, 0, $length);
+		}
+
+		return $title;
+	}
+
+
+	/**
+	 * Returns the lastly selected post's excerpt
+	 * @return string The excerpt of the post
+	 */
+	public function getExcerpt($textlength = 0) {
+
+		global $post;
+		$post = $this->post;
+
+		setup_postdata($post);
+		$excerpt = get_the_excerpt();
+		wp_reset_postdata();
+
+		if(!empty($excerpt) && !empty($textlength)) {
+			$excerpt = substr($excerpt, 0, $textlength);
+		}
+
+		return $excerpt;
+	}
+
+
+	public function getAuthor($nick = true) {
+		$key = $nick ? 'user_nicename' : 'display_name';
+		if(is_object($this->post)) { return get_userdata($this->post->post_author)->$key; }
 			else { return false; }
 	}
 
-	public function getAuthor() {
-		if(is_object($this->post)) { return get_userdata($this->post->post_author)->user_nicename; }
-			else { return false; }
-	}
 
 	public function getCategoryList($post = null) {
 
@@ -193,7 +234,7 @@ class LS_Posts {
 			$cats = wp_get_post_categories($this->post->ID);
 			foreach($cats as $val) {
 				$cat = get_category($val);
-				$list[] = '<a href="/category/'.$cat->slug.'/">'.$cat->name.'</a>';
+				$list[] = '<a href="'.get_category_link($val).'">'.$cat->name.'</a>';
 			}
 			return '<div>'.implode(', ', $list).'</div>';
 		} else {
@@ -208,7 +249,7 @@ class LS_Posts {
 
 		if(has_tag(false, $this->post->ID)) {
 			$tags = wp_get_post_tags($this->post->ID);
-			foreach($tags as $val) { 
+			foreach($tags as $val) {
 				$list[] = '<a href="/tag/'.$val->slug.'/">'.$val->name.'</a>';
 			}
 			return '<div>'.implode(', ', $list).'</div>';
@@ -227,11 +268,12 @@ class LS_Posts {
 
 		if(!is_object($this->post)) { return false; }
 
-		if(empty($length)) {
-			return wp_strip_all_tags($this->post->post_content);
-		} else {
-			return substr(wp_strip_all_tags($this->post->post_content), 0, $length);
+		$content = __($this->post->post_content);
+		if(!empty($length)) {
+			$content = substr(wp_strip_all_tags($content), 0, $length);
 		}
+
+		return nl2br($content);
 	}
 
 	/**
@@ -240,17 +282,9 @@ class LS_Posts {
 	 * @param  integer $postID  The ID of the post
 	 * @return string			The ID of the post, or an empty string on failure.
 	 */
-	public function thumbID($postID = 0) {
-		return get_post_thumbnail_id($postID);
-	}
-
-	/**
-	 * Returns the attchement thumbnail
-	 * @param  integer $postID  The ID of the post
-	 * @param  string  $size    The size of the thumbnail image
-	 * @return array			Array with items: url, width, height, isResized
-	 */
-	public function postThumb($postID = 0, $size = 'medium') {
-		return wp_get_attachment_image_src($postID, $size);
+	public function getPostThumb($postID = 0) {
+		if(function_exists('get_post_thumbnail_id') && function_exists('wp_get_attachment_url')) {
+			return wp_get_attachment_url(get_post_thumbnail_id($postID));
+		}
 	}
 }

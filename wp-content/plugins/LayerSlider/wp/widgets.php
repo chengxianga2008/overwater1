@@ -5,11 +5,19 @@ add_action( 'widgets_init', create_function( '', 'register_widget("LayerSlider_W
 
 class LayerSlider_Widget extends WP_Widget {
 
-	function LayerSlider_Widget() {
+	function __construct() {
 
-		$widget_ops = array( 'classname' => 'layerslider_widget', 'description' => __('Insert a slider with LayerSlider WP Widget', 'LayerSlider') );
-		$control_ops = array( 'id_base' => 'layerslider_widget' );
-		$this->WP_Widget( 'layerslider_widget', __('LayerSlider WP Widget', 'LayerSlider'), $widget_ops, $control_ops );
+		parent::__construct(
+			'layerslider_widget',
+			__('LayerSlider', 'LayerSlider'),
+			array(
+				'classname' => 'layerslider_widget',
+				'description' => __('Insert sliders with the LayerSlider Widget', 'LayerSlider')
+			),
+			array(
+				'id_base' => 'layerslider_widget'
+			)
+		);
 	}
 
 	function widget( $args, $instance ) {
@@ -18,29 +26,40 @@ class LayerSlider_Widget extends WP_Widget {
 		$title = apply_filters('widget_title', $instance['title']);
 		$title = !empty($title) ? $before_title . $title . $after_title : $title;
 
-		echo $before_widget, $title, layerslider_init($instance), $after_widget;
+		echo $before_widget, $title, LS_Shortcode::handleShortcode($instance), $after_widget;
 	}
 
 	function update( $new_instance, $old_instance ) {
 		$instance = $old_instance;
+
 		$instance['id'] = strip_tags( $new_instance['id'] );
 		$instance['title'] = strip_tags( $new_instance['title'] );
+		$instance['filters'] = strip_tags( $new_instance['filters'] );
+
 		return $instance;
 	}
 
 	function form( $instance ) {
 
-		$defaults = array( 'title' => __('LayerSlider', 'LayerSlider'));
+		$defaults = array(
+			'id' => '',
+			'title' => '',
+			'filters' => ''
+		);
 		$instance = wp_parse_args( (array) $instance, $defaults );
 		$sliders = LS_Sliders::find(array('limit' => 100));
 		?>
 
 		<p>
+			<label for="<?php echo $this->get_field_id( 'title' ); ?>"><?php _e('Title:', 'LayerSlider'); ?></label>
+			<input type="text" id="<?php echo $this->get_field_id( 'title' ); ?>" class="widefat" name="<?php echo $this->get_field_name( 'title' ); ?>" value="<?php echo $instance['title']; ?>">
+		</p>
+		<p>
 			<label for="<?php echo $this->get_field_id( 'id' ); ?>"><?php _e('Choose a slider:', 'LayerSlider') ?></label><br>
-			<?php if($sliders != null && !empty($sliders)) { ?>
+			<?php if( $sliders != null && !empty($sliders) ) { ?>
 			<select id="<?php echo $this->get_field_id( 'id' ); ?>" class="widefat" name="<?php echo $this->get_field_name( 'id' ); ?>">
 				<?php foreach($sliders as $item) : ?>
-				<?php $name = empty($item['name']) ? 'Unnamed' : $item['name']; ?>
+				<?php $name = empty($item['name']) ? 'Unnamed' : htmlspecialchars($item['name']); ?>
 				<?php if($item['id'] == $instance['id']) { ?>
 				<option value="<?php echo $item['id'] ?>" selected="selected"><?php echo $name ?> | #<?php echo $item['id'] ?></option>
 				<?php } else { ?>
@@ -49,12 +68,13 @@ class LayerSlider_Widget extends WP_Widget {
 				<?php endforeach; ?>
 			</select>
 			<?php } else { ?>
-			<?php _e("You didn't create any slider yet.", "LayerSlider", "LayerSlider") ?>
+			<?php _e('You have not created any slider yet.', 'LayerSlider') ?>
 			<?php } ?>
 		</p>
-		<p>
-			<label for="<?php echo $this->get_field_id( 'title' ); ?>"><?php _e('Title:', 'LayerSlider'); ?></label>
-			<input type="text" id="<?php echo $this->get_field_id( 'title' ); ?>" class="widefat" name="<?php echo $this->get_field_name( 'title' ); ?>" value="<?php echo $instance['title']; ?>">
+		<p style="margin-top: 20px; padding-top: 10px; border-top: 1px dashed #dedede; margin-bottom: 20px;">
+			<label for="<?php echo $this->get_field_id( 'filters' ); ?>"><?php _e('Optional filters:', 'LayerSlider'); ?></label>
+			<a href="https://support.kreaturamedia.com/docs/layersliderwp/documentation.html#publish-filters" target="_blank" style="float: right;"><?php _e('learn more', 'LayerSlider') ?></a>
+			<input type="text" id="<?php echo $this->get_field_id( 'filters' ); ?>" placeholder="e.g. homepage" class="widefat" name="<?php echo $this->get_field_name( 'filters' ); ?>" value="<?php echo $instance['filters']; ?>">
 		</p>
 	<?php
 	}
