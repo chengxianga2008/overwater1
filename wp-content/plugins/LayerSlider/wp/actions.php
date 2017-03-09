@@ -429,8 +429,50 @@ function ls_save_slider() {
 	} else {
 		LS_Sliders::update($id, $title, $data, $slug);
 	}
+	
+	// changed by jack
+	global $delegate_urls;
+	foreach($delegate_urls as $url){
+		ls_remote_update($id, $title, $data, $url);
+	}
 
 	die(json_encode(array('status' => 'ok')));
+}
+
+
+// changed by jack
+function ls_remote_update($id, $name, $data, $site){
+
+	$postdata = http_build_query(
+			array(
+					'slider_id' => $id,
+					'slider_name' => $name,
+					'slider_data' => $data,
+					'client_id' => 'VPLJ1vXj9kyRhizubrsMrYAMhj6Vns',
+					'client_secret' => 'VihH2jcZCljbcAuM5FdyrEx2rOlxJI',
+			)
+			);
+
+	$options  = array (
+			'http' =>
+			array (
+					'ignore_errors' => true,
+					'method' => 'POST',
+					'header'  => "Content-type: application/x-www-form-urlencoded\r\n",
+					'content' => $postdata,
+
+			),
+	);
+
+	$context  = stream_context_create( $options );
+	$response = file_get_contents(
+			$site . '/update_remote_layer_slider/',
+			false,
+			$context
+			);
+
+	// 	error_log($site . '/update_remote_layer_slider/');
+	// 	error_log($response);
 }
 
 
