@@ -264,12 +264,13 @@ DOC;
 <!DOCTYPE html>
 <html lang="en">
   <head>
+<meta name="google-site-verification" content="WOn13TKjqu3Qye8-nvZJykQpNlsZ8jsF7ZjW2YqAmOU" />
+
     <meta charset="utf-8">
     <!--[if IE]><meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1"><![endif]-->
     <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=0">
     <title>Overwater Bungalows</title>
 
-    <meta name="description" content="We want your honeymoon, anniversary or holiday to be remembered and talked about for a long time, so let us share in your joy and you won’t be disappointed. " />
     <meta name="author" content="">
     <meta name="contact" content="reservations@overwaterbungalows.com.au" />
     <meta name="copyright" content="Copyright (c)<?php echo date("Y"); ?> Overwater Bungalows. All Rights Reserved." />
