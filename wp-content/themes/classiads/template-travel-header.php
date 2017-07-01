@@ -18,7 +18,7 @@
 	
 	wp_enqueue_style( 'select-style', get_template_directory_uri() . '/css/bootstrap-select.min.css', array(bootstrap3-style), '1.0.0' );
 
-	wp_enqueue_style ( 'google-font-style', 'http://fonts.googleapis.com/css?family=Indie+Flower|Rock+Salt|Open+Sans+Condensed:300|Roboto|Great+Vibes|Oleo+Script', array (
+	wp_enqueue_style ( 'google-font-style', 'https://fonts.googleapis.com/css?family=Indie+Flower|Rock+Salt|Open+Sans+Condensed:300|Roboto|Great+Vibes|Oleo+Script', array (
 	), '1.0.0' );
 	
 	//Template
