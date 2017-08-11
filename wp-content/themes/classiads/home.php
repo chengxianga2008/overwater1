@@ -157,7 +157,7 @@ echo do_shortcode('[layerslider id="294"]');
   	
   	<div class="clearfix"></div>
 	
-
+        <?php if(term_exists('maldives-overwater', 'package_taxonomy')) { ?>
 	<div class="box">
 
 		<div class="boxInner">
@@ -172,6 +172,9 @@ echo do_shortcode('[layerslider id="294"]');
 		</div>
 
 	</div>
+        <?php } ?>
+
+        <?php if(term_exists('tahiti-overwater', 'package_taxonomy')) { ?>
 
 	<div class="box">
 
@@ -189,6 +192,11 @@ echo do_shortcode('[layerslider id="294"]');
 
 	</div>
 
+        <?php } ?>
+
+        <?php if(term_exists('fiji-overwater', 'package_taxonomy')) { ?>
+
+
 	<div class="box">
 
 		<div class="boxInner">
@@ -203,6 +211,11 @@ echo do_shortcode('[layerslider id="294"]');
 		</div>
 
 	</div>
+
+        <?php } ?>
+
+        <?php if(term_exists('malaysia-overwater', 'package_taxonomy')) { ?>
+
 
 	<div class="box">
 
@@ -219,6 +232,11 @@ echo do_shortcode('[layerslider id="294"]');
 
 	</div>
 
+        <?php } ?>
+
+        <?php if(term_exists('vanuatu-overwater', 'package_taxonomy')) { ?>
+
+
 	<div class="box">
 
 		<div class="boxInner">
@@ -233,6 +251,11 @@ echo do_shortcode('[layerslider id="294"]');
 		</div>
 
 	</div>
+
+         <?php } ?>
+
+        <?php if(term_exists('samoa-overwater', 'package_taxonomy')) { ?>
+
 
 	<div class="box">
 
@@ -249,6 +272,11 @@ echo do_shortcode('[layerslider id="294"]');
 
 	</div>
 
+        <?php } ?>
+
+        <?php if(term_exists('philippines-overwater', 'package_taxonomy')) { ?>
+
+
 	<div class="box">
 
 		<div class="boxInner">
@@ -264,6 +292,11 @@ echo do_shortcode('[layerslider id="294"]');
 
 	</div>
 
+         <?php } ?>
+
+        <?php if(term_exists('cook-islands-overwater', 'package_taxonomy')) { ?>
+
+
 	<div class="box">
 
 		<div class="boxInner">
@@ -278,6 +311,8 @@ echo do_shortcode('[layerslider id="294"]');
 		</div>
 
 	</div>
+
+        <?php } ?>
 
 	<style>
 .prosenjitdiv a {
